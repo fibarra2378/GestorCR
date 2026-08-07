@@ -5,6 +5,7 @@ interface SidebarProps {
   currentTab: 'tickets' | 'affiliates';
   onSelectTab: (tab: 'tickets' | 'affiliates') => void;
   onOpenSimulator: () => void;
+  onOpenUsers?: () => void;
   onLogout: () => void;
   user: any;
 }
@@ -13,6 +14,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentTab,
   onSelectTab,
   onOpenSimulator,
+  onOpenUsers,
   onLogout,
   user
 }) => {
@@ -44,6 +46,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         <div style={{ marginTop: 'auto', borderTop: '1px solid rgba(123, 189, 232, 0.15)', paddingTop: '1rem' }}>
+          {user?.role === 'ADMIN' && onOpenUsers && (
+            <button
+              className="nav-item"
+              style={{ width: '100%', marginBottom: '0.5rem', color: '#7BBDE8' }}
+              onClick={onOpenUsers}
+            >
+              <ShieldCheck size={20} />
+              <span>Gestión Operadores</span>
+            </button>
+          )}
+
           <button
             className="nav-item"
             style={{
@@ -76,3 +89,4 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </div>
   );
 };
+

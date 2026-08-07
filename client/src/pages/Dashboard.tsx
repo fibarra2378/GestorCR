@@ -167,7 +167,19 @@ export const Dashboard: React.FC = () => {
         >
           Cuotas / Facturación
         </button>
+
+        <button
+          className="btn btn-primary"
+          style={{ marginLeft: 'auto', padding: '0.4rem 0.85rem', fontSize: '0.82rem' }}
+          onClick={() => {
+            window.open(`/api/export/tickets-csv?status=${statusFilter}&category=${categoryFilter}`, '_blank');
+          }}
+        >
+          Exportar Reporte CSV
+        </button>
+
       </div>
+
 
       {/* Main Split Grid */}
       <div className="dashboard-grid">

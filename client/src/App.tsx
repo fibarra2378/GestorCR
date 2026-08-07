@@ -4,7 +4,8 @@ import { Dashboard } from './pages/Dashboard';
 import { Affiliates } from './pages/Affiliates';
 import { Login } from './pages/Login';
 import { SimulatorModal } from './components/SimulatorModal';
-import { Sun, Moon, Layers } from 'lucide-react';
+import { UsersModal } from './components/UsersModal';
+import { Sun, Moon } from 'lucide-react';
 import { api } from './services/api';
 
 export const App: React.FC = () => {
@@ -12,6 +13,7 @@ export const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [currentTab, setCurrentTab] = useState<'tickets' | 'affiliates'>('tickets');
   const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
+  const [isUsersOpen, setIsUsersOpen] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
@@ -55,6 +57,7 @@ export const App: React.FC = () => {
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
         onOpenSimulator={() => setIsSimulatorOpen(true)}
+        onOpenUsers={() => setIsUsersOpen(true)}
         onLogout={handleLogout}
         user={user}
       />
@@ -84,9 +87,15 @@ export const App: React.FC = () => {
           isOpen={isSimulatorOpen}
           onClose={() => setIsSimulatorOpen(false)}
         />
+
+        <UsersModal
+          isOpen={isUsersOpen}
+          onClose={() => setIsUsersOpen(false)}
+        />
       </div>
     </div>
   );
 };
 
 export default App;
+

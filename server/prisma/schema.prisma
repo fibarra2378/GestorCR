@@ -98,13 +98,14 @@ model Message {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  username     String   @unique
+  id           String     @id @default(uuid())
+  username     String     @unique
   passwordHash String
   name         String
-  role         UserRole @default(OPERADOR)
-  createdAt    DateTime @default(now())
+  role         UserRole   @default(OPERADOR)
+  createdAt    DateTime   @default(now())
   tickets      Ticket[]
+  auditLogs    AuditLog[]
 }
 
 model BotSession {
@@ -116,3 +117,18 @@ model BotSession {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String
+  entity    String
+  entityId  String?
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+

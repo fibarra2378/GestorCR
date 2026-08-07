@@ -7,6 +7,7 @@ import { WhatsAppController } from './controllers/whatsapp.controller';
 import { TicketsController } from './controllers/tickets.controller';
 import { AffiliatesController } from './controllers/affiliates.controller';
 import { AuthController } from './controllers/auth.controller';
+import { UsersController } from './controllers/users.controller';
 import { WSService } from './services/ws.service';
 
 const app = express();
@@ -36,11 +37,21 @@ app.post('/api/whatsapp/simulate-incoming', async (req, res) => {
 app.post('/api/auth/login', AuthController.login);
 app.get('/api/auth/me', AuthController.me);
 
+// Users / Operators Management Routes
+app.get('/api/users', UsersController.getUsers);
+app.post('/api/users', UsersController.createUser);
+app.delete('/api/users/:id', UsersController.deleteUser);
+
 // Tickets Routes
 app.get('/api/tickets', TicketsController.getTickets);
+app.get('/api/export/tickets-csv', TicketsController.exportTicketsCSV);
 app.get('/api/tickets/:id', TicketsController.getTicketById);
 app.patch('/api/tickets/:id', TicketsController.updateTicket);
 app.post('/api/tickets/:id/reply', TicketsController.sendOperatorReply);
+
+
+// Audit Logs Route
+app.get('/api/audit-logs', TicketsController.getAuditLogs);
 
 // Affiliates Routes
 app.get('/api/affiliates', AffiliatesController.getAffiliates);
