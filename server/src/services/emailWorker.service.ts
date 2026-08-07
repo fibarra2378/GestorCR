@@ -16,6 +16,7 @@ export interface IncomingEmailPayload {
 export class EmailWorkerService {
   private static isPollingRunning = false;
   private static pollTimer: NodeJS.Timeout | null = null;
+  private static processedMessageIds = new Set<string>();
 
   /**
    * Validate if the subject contains keywords 'consulta' or 'reclamo' (case-insensitive)
@@ -35,7 +36,7 @@ export class EmailWorkerService {
 
     const emailUser = process.env.EMAIL_USER || 'deptotemporariosantafe@gmail.com';
     const emailPass = process.env.EMAIL_PASS;
-    const pollInterval = Number(process.env.EMAIL_POLL_INTERVAL_MS) || 30000; // 30 seconds
+    const pollInterval = Number(process.env.EMAIL_POLL_INTERVAL_MS) || 15000; // 15 seconds
 
     console.log(`[EMAIL IMAP WORKER] Iniciando servicio de escucha para ${emailUser}...`);
 
@@ -55,7 +56,7 @@ export class EmailWorkerService {
   }
 
   /**
-   * Connect to imap.gmail.com:993 and fetch UNSEEN emails
+   * Connect to imap.gmail.com:993 and fetch UNSEEN / recent emails across all folders
    */
   private static async checkImapInbox(emailUser: string, emailPass: string) {
     const client = new ImapFlow({
@@ -66,51 +67,109 @@ export class EmailWorkerService {
         user: emailUser,
         pass: emailPass
       },
-      logger: false
+      logger: false,
+      emitLogs: false
+    });
+
+    client.on('error', (err) => {
+      console.error(`[EMAIL IMAP SOCKET ERROR] (${emailUser}):`, err.message);
     });
 
     try {
       await client.connect();
-      const lock = await client.getMailboxLock('INBOX');
 
-      try {
-        // Search for unread messages (seen: false)
-        const messages = client.fetch({ seen: false }, { source: true, uid: true, envelope: true });
+      // Get list of all available mailboxes
+      const mailboxes = await client.list();
+      const folderNames = mailboxes.map(b => b.path);
+      console.log(`[EMAIL IMAP FOLDERS DETECTED] (${folderNames.length} carpetas):`, folderNames.join(', '));
 
-        for await (const message of messages) {
-          if (!message.source) continue;
-
-          const parsed = await simpleParser(message.source);
-          const envFrom = message.envelope?.from && message.envelope.from.length > 0 ? message.envelope.from[0] : undefined;
-          const fromEmail = parsed.from?.value[0]?.address || envFrom?.address || '';
-          const fromName = parsed.from?.value[0]?.name || envFrom?.name || fromEmail;
-          const subject = parsed.subject || message.envelope?.subject || '';
-          const body = parsed.text || parsed.html || '';
-
-          if (!fromEmail) continue;
-
-
-          // Ingest email
-          const result = await this.processIncomingEmail({
-            fromEmail,
-            fromName,
-            subject,
-            body,
-            emailMessageId: message.envelope?.messageId || `uid_${message.uid}`
-          });
-
-          // Mark message as SEEN if processed or ignored to prevent infinite loop
-          if (message.uid) {
-            await client.messageFlagsAdd({ uid: message.uid }, ['\\Seen']);
+      const targetFolders = ['INBOX'];
+      for (const path of folderNames) {
+        if (path.includes('Spam') || path.includes('Junk') || path.includes('Todos') || path.includes('All') || path.includes('Sent') || path.includes('Enviados')) {
+          if (!targetFolders.includes(path)) {
+            targetFolders.push(path);
           }
         }
-      } finally {
-        lock.release();
+      }
+
+
+      for (const folder of targetFolders) {
+        await this.scanMailbox(client, folder);
       }
 
       await client.logout();
     } catch (error: any) {
       console.error(`[EMAIL IMAP ERROR] Error al conectar a Gmail (${emailUser}):`, error.message);
+    }
+  }
+
+
+  /**
+   * Scan specific mailbox for unseen or recent unprocessed messages
+   */
+  private static async scanMailbox(client: ImapFlow, mailboxName: string) {
+    let lock;
+    try {
+      lock = await client.getMailboxLock(mailboxName);
+    } catch {
+      return; // Mailbox not found
+    }
+
+    try {
+      // 1. Search unread messages
+      let uids = await client.search({ seen: false });
+
+      // 2. Fallback: if no unseen, check recent messages from today to catch emails opened in webmail
+      if (!uids || uids.length === 0) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        uids = await client.search({ since: today });
+      }
+
+      if (!uids || uids.length === 0) return;
+
+      // Process newest 10 messages
+      const newestUids = [...uids].reverse().slice(0, 10);
+
+      for (const uid of newestUids) {
+        try {
+          const msg = await client.fetchOne(uid.toString(), { source: true, envelope: true, uid: true }, { uid: true });
+          if (!msg || !msg.source) continue;
+
+          const msgId = msg.envelope?.messageId || `uid_${mailboxName}_${uid}`;
+          if (this.processedMessageIds.has(msgId)) continue;
+
+          const parsed = await simpleParser(msg.source);
+          const envFrom = msg.envelope?.from && msg.envelope.from.length > 0 ? msg.envelope.from[0] : undefined;
+          const fromEmail = parsed.from?.value[0]?.address || envFrom?.address || '';
+          const fromName = parsed.from?.value[0]?.name || envFrom?.name || fromEmail;
+          const subject = parsed.subject || msg.envelope?.subject || '';
+          const body = parsed.text || parsed.html || '';
+
+          if (!fromEmail) continue;
+
+          console.log(`[EMAIL IMAP SCAN] Mail UID ${uid} en '${mailboxName}' | De: ${fromEmail} | Asunto: "${subject}"`);
+
+          const result = await this.processIncomingEmail({
+            fromEmail,
+            fromName,
+            subject,
+            body,
+            emailMessageId: msgId
+          });
+
+          if (result.processed || result.reason) {
+            this.processedMessageIds.add(msgId);
+          }
+
+          // Mark message as SEEN
+          await client.messageFlagsAdd(uid.toString(), ['\\Seen'], { uid: true });
+        } catch (fetchErr: any) {
+          console.error(`[EMAIL IMAP FETCH ERROR] Error procesando UID ${uid} en '${mailboxName}':`, fetchErr.message);
+        }
+      }
+    } finally {
+      lock.release();
     }
   }
 
@@ -120,12 +179,20 @@ export class EmailWorkerService {
   public static async processIncomingEmail(payload: IncomingEmailPayload): Promise<{ processed: boolean; ticketCode?: string; reason?: string }> {
     const { fromEmail, fromName, subject, body, emailMessageId } = payload;
     const cleanEmail = fromEmail.trim().toLowerCase();
+    const systemUser = (process.env.EMAIL_USER || 'deptotemporariosantafe@gmail.com').trim().toLowerCase();
+
+    // 0. Ignore system outbound copies (e.g. sent to self or auto-ack copies)
+    if (cleanEmail === systemUser) {
+      console.log(`[EMAIL SYSTEM OUTBOUND SKIPPED] Mail emitido por la propia casilla del sistema omitido: ${cleanEmail}`);
+      return { processed: false, reason: 'Mail propio del sistema' };
+    }
 
     // 1. Verify Subject Filter ("consulta" or "reclamo")
     if (!this.shouldProcessEmail(subject)) {
       console.log(`[EMAIL INGESTION IGNORED] Mail de ${cleanEmail} omitido. Asunto sin palabra clave 'consulta'/'reclamo': "${subject}"`);
       return { processed: false, reason: 'Asunto no contiene consulta o reclamo' };
     }
+
 
     console.log(`[EMAIL INGESTION MATCH] Procesando correo válido de ${cleanEmail} | Asunto: "${subject}"`);
 
