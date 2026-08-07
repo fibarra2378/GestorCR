@@ -225,6 +225,7 @@ input, select, textarea {
 
 /* Pill buttons matching the reference image (Depto. 1, Depto. 2 style) */
 .pill-button {
+  position: relative;
   background: #ffffff;
   border: 1.5px solid var(--c-sky-blue);
   color: var(--c-navy-rich);
@@ -245,6 +246,60 @@ input, select, textarea {
   border-color: var(--c-navy-dark);
   box-shadow: 0 4px 12px rgba(10, 65, 116, 0.25);
 }
+
+/* Red/Amber Alert Badge for Unattended / New Tickets */
+.pill-alert-badge {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.5), 0 0 0 2px #ffffff;
+  animation: alertPulse 2s infinite;
+  z-index: 10;
+}
+
+@keyframes alertPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7), 0 0 0 2px #ffffff;
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0), 0 0 0 2px #ffffff;
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0), 0 0 0 2px #ffffff;
+  }
+}
+
+/* KPI Card Live Pulse when updated */
+.kpi-card.pulse-update {
+  animation: kpiGlow 1.2s ease-out;
+}
+
+@keyframes kpiGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(123, 189, 232, 0.8), var(--shadow-card);
+    transform: scale(1.02);
+  }
+  50% {
+    box-shadow: 0 0 20px 4px rgba(123, 189, 232, 0.6), var(--shadow-card);
+    transform: scale(1.03);
+  }
+  100% {
+    box-shadow: var(--shadow-card);
+    transform: scale(1);
+  }
+}
+
 
 /* KPI Summary Cards Bar (Inspired directly by the reference image top row) */
 .kpi-row {
