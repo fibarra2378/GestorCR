@@ -9,6 +9,7 @@ import { AffiliatesController } from './controllers/affiliates.controller';
 import { AuthController } from './controllers/auth.controller';
 import { UsersController } from './controllers/users.controller';
 import { WSService } from './services/ws.service';
+import { EmailWorkerService } from './services/emailWorker.service';
 
 const app = express();
 const server = http.createServer(app);
@@ -40,7 +41,6 @@ app.post('/api/email/simulate-incoming', async (req, res) => {
     return res.status(400).json({ success: false, error: 'fromEmail, subject y body son obligatorios' });
   }
 
-  const { EmailWorkerService } = await import('./services/emailWorker.service');
   const result = await EmailWorkerService.processIncomingEmail({
     fromEmail,
     fromName,
@@ -91,10 +91,14 @@ app.get('/api/health', (req, res) => {
 // Initialize WebSockets
 WSService.init(server);
 
-// Start Server
+// Start Server & Email Polling
 server.listen(config.port, () => {
   console.log(`=======================================================`);
   console.log(`🚀 GestorCR Servidor Backend corriendo en puerto ${config.port}`);
   console.log(`📌 Webhook URL WhatsApp: http://localhost:${config.port}/api/whatsapp/webhook`);
+  console.log(`✉️ Casilla Email Atendida: deptotemporariosantafe@gmail.com`);
   console.log(`=======================================================`);
+
+  // Start IMAP email poller worker
+  EmailWorkerService.startPolling();
 });

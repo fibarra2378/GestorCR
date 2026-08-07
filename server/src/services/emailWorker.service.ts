@@ -2,6 +2,8 @@ import { prisma } from '../db';
 import { EmailService } from './email.service';
 import { WSService } from './ws.service';
 import { TicketCategory, TicketStatus, MessageSender, TicketChannel } from '@prisma/client';
+import { ImapFlow } from 'imapflow';
+import { simpleParser } from 'mailparser';
 
 export interface IncomingEmailPayload {
   fromEmail: string;
@@ -12,6 +14,9 @@ export interface IncomingEmailPayload {
 }
 
 export class EmailWorkerService {
+  private static isPollingRunning = false;
+  private static pollTimer: NodeJS.Timeout | null = null;
+
   /**
    * Validate if the subject contains keywords 'consulta' or 'reclamo' (case-insensitive)
    */
@@ -19,6 +24,94 @@ export class EmailWorkerService {
     if (!subject) return false;
     const lower = subject.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     return lower.includes('consulta') || lower.includes('reclamo');
+  }
+
+  /**
+   * Start background IMAP polling loop for deptotemporariosantafe@gmail.com
+   */
+  public static startPolling() {
+    if (this.isPollingRunning) return;
+    this.isPollingRunning = true;
+
+    const emailUser = process.env.EMAIL_USER || 'deptotemporariosantafe@gmail.com';
+    const emailPass = process.env.EMAIL_PASS;
+    const pollInterval = Number(process.env.EMAIL_POLL_INTERVAL_MS) || 30000; // 30 seconds
+
+    console.log(`[EMAIL IMAP WORKER] Iniciando servicio de escucha para ${emailUser}...`);
+
+    if (!emailPass) {
+      console.log(`⚠️ [EMAIL IMAP ADVERTENCIA] Falta EMAIL_PASS (Contraseña de Aplicación) en .env.`);
+      console.log(`📌 Para sincronización automática 24/7 con Gmail, configure EMAIL_PASS en server/.env.`);
+      return;
+    }
+
+    // Execute initial check immediately
+    this.checkImapInbox(emailUser, emailPass);
+
+    // Schedule periodic polling
+    this.pollTimer = setInterval(() => {
+      this.checkImapInbox(emailUser, emailPass);
+    }, pollInterval);
+  }
+
+  /**
+   * Connect to imap.gmail.com:993 and fetch UNSEEN emails
+   */
+  private static async checkImapInbox(emailUser: string, emailPass: string) {
+    const client = new ImapFlow({
+      host: process.env.EMAIL_IMAP_HOST || 'imap.gmail.com',
+      port: Number(process.env.EMAIL_IMAP_PORT) || 993,
+      secure: true,
+      auth: {
+        user: emailUser,
+        pass: emailPass
+      },
+      logger: false
+    });
+
+    try {
+      await client.connect();
+      const lock = await client.getMailboxLock('INBOX');
+
+      try {
+        // Search for unread messages (seen: false)
+        const messages = client.fetch({ seen: false }, { source: true, uid: true, envelope: true });
+
+        for await (const message of messages) {
+          if (!message.source) continue;
+
+          const parsed = await simpleParser(message.source);
+          const envFrom = message.envelope?.from && message.envelope.from.length > 0 ? message.envelope.from[0] : undefined;
+          const fromEmail = parsed.from?.value[0]?.address || envFrom?.address || '';
+          const fromName = parsed.from?.value[0]?.name || envFrom?.name || fromEmail;
+          const subject = parsed.subject || message.envelope?.subject || '';
+          const body = parsed.text || parsed.html || '';
+
+          if (!fromEmail) continue;
+
+
+          // Ingest email
+          const result = await this.processIncomingEmail({
+            fromEmail,
+            fromName,
+            subject,
+            body,
+            emailMessageId: message.envelope?.messageId || `uid_${message.uid}`
+          });
+
+          // Mark message as SEEN if processed or ignored to prevent infinite loop
+          if (message.uid) {
+            await client.messageFlagsAdd({ uid: message.uid }, ['\\Seen']);
+          }
+        }
+      } finally {
+        lock.release();
+      }
+
+      await client.logout();
+    } catch (error: any) {
+      console.error(`[EMAIL IMAP ERROR] Error al conectar a Gmail (${emailUser}):`, error.message);
+    }
   }
 
   /**

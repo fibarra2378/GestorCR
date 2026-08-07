@@ -24,6 +24,8 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.10",
+    "imapflow": "^1.0.15",
+    "mailparser": "^3.6.8",
     "ws": "^8.16.0"
   },
   "devDependencies": {
@@ -32,6 +34,8 @@
     "@types/jsonwebtoken": "^9.0.6",
     "@types/multer": "^1.4.11",
     "@types/nodemailer": "^6.4.14",
+    "@types/mailparser": "^3.4.4",
+
 
     "@types/node": "^20.11.24",
     "@types/ws": "^8.5.10",
