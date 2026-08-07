@@ -27,6 +27,8 @@ export interface Ticket {
   id: string;
   code: string;
   phone: string;
+  email?: string;
+  channel?: 'WHATSAPP' | 'EMAIL';
   category: TicketCategory;
   status: TicketStatus;
   priority: TicketPriority;
@@ -37,6 +39,7 @@ export interface Ticket {
   updatedAt: string;
   messages?: Message[];
 }
+
 
 export interface User {
   id: string;

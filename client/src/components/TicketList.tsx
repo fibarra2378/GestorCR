@@ -101,13 +101,15 @@ export const TicketList: React.FC<TicketListProps> = ({
                 <div className="ticket-card-title">{affiliateName}</div>
 
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.4rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  <span>📱 {ticket.phone}</span>
+                  <span>{ticket.channel === 'EMAIL' ? '✉️ Email' : '💬 WhatsApp'}</span>
+                  <span style={{ fontWeight: 600 }}>{ticket.email || ticket.phone}</span>
                   {ticket.affiliate?.matricula && (
                     <span style={{ backgroundColor: 'var(--bg-main)', padding: '0.1rem 0.4rem', borderRadius: '4px', border: '1px solid var(--border)' }}>
                       {ticket.affiliate.matricula}
                     </span>
                   )}
                 </div>
+
 
                 <div className="ticket-card-preview">
                   <MessageSquare size={12} style={{ display: 'inline', marginRight: '4px' }} />

@@ -33,6 +33,31 @@ app.post('/api/whatsapp/simulate-incoming', async (req, res) => {
   return res.json({ success: true, message: 'Mensaje simulado procesado correctamente' });
 });
 
+// Email Ingestion & Simulator Routes (deptotemporariosantafe@gmail.com)
+app.post('/api/email/simulate-incoming', async (req, res) => {
+  const { fromEmail, fromName, subject, body } = req.body;
+  if (!fromEmail || !subject || !body) {
+    return res.status(400).json({ success: false, error: 'fromEmail, subject y body son obligatorios' });
+  }
+
+  const { EmailWorkerService } = await import('./services/emailWorker.service');
+  const result = await EmailWorkerService.processIncomingEmail({
+    fromEmail,
+    fromName,
+    subject,
+    body,
+    emailMessageId: `em_sim_${Date.now()}`
+  });
+
+  return res.json({
+    success: result.processed,
+    message: result.processed
+      ? `Email procesado exitosamente. Ticket generado: ${result.ticketCode}`
+      : `Email ignorado por filtro de asunto: ${result.reason}`
+  });
+});
+
+
 // Auth Routes
 app.post('/api/auth/login', AuthController.login);
 app.get('/api/auth/me', AuthController.me);

@@ -65,10 +65,17 @@ model Affiliate {
   @@index([phone])
 }
 
+enum TicketChannel {
+  WHATSAPP
+  EMAIL
+}
+
 model Ticket {
   id           String         @id @default(uuid())
   code         String         @unique
   phone        String
+  email        String?
+  channel      TicketChannel  @default(WHATSAPP)
   category     TicketCategory @default(CONSULTA)
   status       TicketStatus   @default(NUEVO)
   priority     TicketPriority @default(MEDIA)
@@ -85,17 +92,20 @@ model Ticket {
 
   @@index([status])
   @@index([phone])
+  @@index([email])
 }
 
 model Message {
-  id          String        @id @default(uuid())
-  ticketId    String
-  ticket      Ticket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  sender      MessageSender
-  body        String
-  whatsappId  String?
-  createdAt   DateTime      @default(now())
+  id             String        @id @default(uuid())
+  ticketId       String
+  ticket         Ticket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender         MessageSender
+  body           String
+  whatsappId     String?
+  emailMessageId String?
+  createdAt      DateTime      @default(now())
 }
+
 
 model User {
   id           String     @id @default(uuid())

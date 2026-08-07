@@ -171,26 +171,43 @@ export class TicketsController {
         entity: 'Ticket',
         entityId: ticket.id,
         userId: currentUserId,
-        details: `Operador respondió al ticket ${ticket.code}`
+        details: `Operador respondió al ticket ${ticket.code} vía ${ticket.channel}`
       });
 
-      // Send to WhatsApp via Meta API
-      const whatsappResult = await WhatsAppService.sendTextMessage({
-        toPhone: ticket.phone,
-        text: `💬 *Respuesta de Colegio de Fonoaudiólogos (Ticket ${ticket.code}):*\n\n${body.trim()}`
-      });
-
-      if (whatsappResult.messageId) {
-        await prisma.message.update({
-          where: { id: message.id },
-          data: { whatsappId: whatsappResult.messageId }
+      // Send to recipient via Email or WhatsApp depending on ticket channel
+      if (ticket.channel === 'EMAIL' || ticket.email) {
+        const { EmailService } = await import('../services/email.service');
+        const emailResult = await EmailService.sendEmail({
+          to: ticket.email || ticket.phone,
+          subject: `Re: Ticket Nº ${ticket.code} - Colegio de Fonoaudiólogos`,
+          text: body.trim()
         });
+
+        if (emailResult.messageId) {
+          await prisma.message.update({
+            where: { id: message.id },
+            data: { emailMessageId: emailResult.messageId }
+          });
+        }
+      } else {
+        const whatsappResult = await WhatsAppService.sendTextMessage({
+          toPhone: ticket.phone,
+          text: `💬 *Respuesta de Colegio de Fonoaudiólogos (Ticket ${ticket.code}):*\n\n${body.trim()}`
+        });
+
+        if (whatsappResult.messageId) {
+          await prisma.message.update({
+            where: { id: message.id },
+            data: { whatsappId: whatsappResult.messageId }
+          });
+        }
       }
 
       WSService.broadcast('NEW_MESSAGE', { ticketId: ticket.id, message });
       WSService.broadcast('TICKET_UPDATED', updatedTicket);
 
       return res.json({ success: true, data: { message, ticket: updatedTicket } });
+
     } catch (error: any) {
       console.error('[REPLY TICKET ERROR]', error);
       return res.status(500).json({ success: false, error: 'Error al enviar la respuesta al afiliado' });
