@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gestorcr-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gestorcr
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: gestorcr-redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: gestorcr-server
+    restart: always
+    environment:
+      PORT: 4000
+      NODE_ENV: production
+      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/gestorcr?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      JWT_SECRET: "gestorcr-super-secret-key-2026"
+    ports:
+      - "4000:4000"
+    depends_on:
+      - postgres
+      - redis
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: gestorcr-client
+    restart: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - server
+
+volumes:
+  postgres_data:

@@ -1,0 +1,12 @@
+{
+  "name": "gestor-cr",
+  "version": "1.0.0",
+  "description": "Sistema de recepción, validación y ticketing para Colegio de Fonoaudiólogos",
+  "private": true,
+  "scripts": {
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "build": "cd server && npm run build && cd ../client && npm run build",
+    "start": "cd server && npm start"
+  }
+}
