@@ -105,7 +105,7 @@ export class EmailWorkerService {
 
 
   /**
-   * Scan specific mailbox for unseen or recent unprocessed messages
+   * Scan specific mailbox for the latest 25 messages received
    */
   private static async scanMailbox(client: ImapFlow, mailboxName: string) {
     let lock;
@@ -116,27 +116,29 @@ export class EmailWorkerService {
     }
 
     try {
-      // 1. Search unread messages
-      let uids = await client.search({ seen: false });
+      const total = client.mailbox ? client.mailbox.exists : 0;
+      if (!total || total === 0) return;
 
-      // 2. Fallback: if no unseen, check recent messages from today to catch emails opened in webmail
-      if (!uids || uids.length === 0) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        uids = await client.search({ since: today });
+      const startSeq = Math.max(1, total - 25);
+      const range = `${startSeq}:${total}`;
+
+      console.log(`[EMAIL IMAP SCAN] Escaneando '${mailboxName}' (Mensajes ${range} de ${total})...`);
+
+      const messages = client.fetch(range, { source: true, envelope: true, uid: true });
+      const fetchedMsgs = [];
+
+      for await (const msg of messages) {
+        fetchedMsgs.push(msg);
       }
 
-      if (!uids || uids.length === 0) return;
+      // Process newest messages first (highest sequence number first)
+      fetchedMsgs.reverse();
 
-      // Process newest 10 messages
-      const newestUids = [...uids].reverse().slice(0, 10);
-
-      for (const uid of newestUids) {
+      for (const msg of fetchedMsgs) {
         try {
-          const msg = await client.fetchOne(uid.toString(), { source: true, envelope: true, uid: true }, { uid: true });
           if (!msg || !msg.source) continue;
 
-          const msgId = msg.envelope?.messageId || `uid_${mailboxName}_${uid}`;
+          const msgId = msg.envelope?.messageId || `seq_${mailboxName}_${msg.seq}`;
           if (this.processedMessageIds.has(msgId)) continue;
 
           const parsed = await simpleParser(msg.source);
@@ -148,7 +150,7 @@ export class EmailWorkerService {
 
           if (!fromEmail) continue;
 
-          console.log(`[EMAIL IMAP SCAN] Mail UID ${uid} en '${mailboxName}' | De: ${fromEmail} | Asunto: "${subject}"`);
+          console.log(`[EMAIL IMAP FETCH] Mail #${msg.seq} en '${mailboxName}' | De: ${fromEmail} | Asunto: "${subject}"`);
 
           const result = await this.processIncomingEmail({
             fromEmail,
@@ -162,16 +164,18 @@ export class EmailWorkerService {
             this.processedMessageIds.add(msgId);
           }
 
-          // Mark message as SEEN
-          await client.messageFlagsAdd(uid.toString(), ['\\Seen'], { uid: true });
+          if (msg.uid) {
+            await client.messageFlagsAdd(msg.uid.toString(), ['\\Seen'], { uid: true });
+          }
         } catch (fetchErr: any) {
-          console.error(`[EMAIL IMAP FETCH ERROR] Error procesando UID ${uid} en '${mailboxName}':`, fetchErr.message);
+          console.error(`[EMAIL IMAP FETCH ERROR] Error procesando mensaje en '${mailboxName}':`, fetchErr.message);
         }
       }
     } finally {
       lock.release();
     }
   }
+
 
   /**
    * Core logic to ingest an incoming email sent to deptotemporariosantafe@gmail.com
