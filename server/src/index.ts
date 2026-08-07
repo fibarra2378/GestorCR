@@ -3,7 +3,6 @@ import http from 'http';
 import cors from 'cors';
 import multer from 'multer';
 import { config } from './config';
-import { WhatsAppController } from './controllers/whatsapp.controller';
 import { TicketsController } from './controllers/tickets.controller';
 import { AffiliatesController } from './controllers/affiliates.controller';
 import { AuthController } from './controllers/auth.controller';
@@ -20,19 +19,6 @@ app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// WhatsApp Webhook Routes (Meta API Verification & Events)
-app.get('/api/whatsapp/webhook', WhatsAppController.verifyWebhook);
-app.post('/api/whatsapp/webhook', WhatsAppController.handleWebhook);
-
-// Dev Simulator Route (To test incoming WhatsApp messages without Meta credentials)
-app.post('/api/whatsapp/simulate-incoming', async (req, res) => {
-  const { phone, message } = req.body;
-  if (!phone || !message) {
-    return res.status(400).json({ success: false, error: 'phone y message son requeridos' });
-  }
-  await WhatsAppController.processIncomingMessage(phone, message, `sim_${Date.now()}`);
-  return res.json({ success: true, message: 'Mensaje simulado procesado correctamente' });
-});
 
 // Email Ingestion & Simulator Routes (deptotemporariosantafe@gmail.com)
 app.post('/api/email/simulate-incoming', async (req, res) => {
@@ -95,9 +81,9 @@ WSService.init(server);
 server.listen(config.port, () => {
   console.log(`=======================================================`);
   console.log(`🚀 GestorCR Servidor Backend corriendo en puerto ${config.port}`);
-  console.log(`📌 Webhook URL WhatsApp: http://localhost:${config.port}/api/whatsapp/webhook`);
   console.log(`✉️ Casilla Email Atendida: deptotemporariosantafe@gmail.com`);
   console.log(`=======================================================`);
+
 
   // Start IMAP email poller worker
   EmailWorkerService.startPolling();

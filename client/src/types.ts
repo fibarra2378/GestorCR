@@ -28,8 +28,9 @@ export interface Ticket {
   code: string;
   phone: string;
   email?: string;
-  channel?: 'WHATSAPP' | 'EMAIL';
+  channel?: 'EMAIL';
   category: TicketCategory;
+
   status: TicketStatus;
   priority: TicketPriority;
   affiliateId?: string;

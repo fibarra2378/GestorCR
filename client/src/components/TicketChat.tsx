@@ -23,7 +23,7 @@ export const TicketChat: React.FC<TicketChatProps> = ({
       <div className="chat-pane" style={{ justifyContent: 'center', alignItems: 'center', color: 'var(--text-muted)' }}>
         <MessageSquare size={48} style={{ opacity: 0.3, marginBottom: '1rem' }} />
         <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Seleccione un ticket para iniciar la atención</h3>
-        <p style={{ fontSize: '0.85rem' }}>Podrá visualizar el historial de WhatsApp y enviar respuestas directamente.</p>
+        <p style={{ fontSize: '0.85rem' }}>Podrá visualizar el historial de E-mail y enviar respuestas directamente.</p>
       </div>
     );
   }
@@ -60,7 +60,7 @@ export const TicketChat: React.FC<TicketChatProps> = ({
           </div>
 
           <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            <span>📱 {ticket.phone}</span>
+            <span>✉️ {ticket.email || ticket.phone}</span>
             {ticket.affiliate && (
               <>
                 <span>🪪 DNI: {ticket.affiliate.dni}</span>
@@ -155,7 +155,7 @@ export const TicketChat: React.FC<TicketChatProps> = ({
       {/* Input Area */}
       <form className="chat-input-area" onSubmit={handleSend}>
         <textarea
-          placeholder="Escriba su respuesta al WhatsApp del afiliado..."
+          placeholder="Escriba su respuesta por E-mail al afiliado..."
           value={replyText}
           onChange={(e) => setReplyText(e.target.value)}
           onKeyDown={(e) => {
@@ -168,9 +168,10 @@ export const TicketChat: React.FC<TicketChatProps> = ({
 
         <button type="submit" className="btn btn-primary" style={{ height: '48px' }} disabled={sending || !replyText.trim()}>
           <Send size={18} />
-          <span>{sending ? 'Enviando...' : 'Enviar por WhatsApp'}</span>
+          <span>{sending ? 'Enviando...' : 'Enviar por E-mail'}</span>
         </button>
       </form>
     </div>
   );
+
 };

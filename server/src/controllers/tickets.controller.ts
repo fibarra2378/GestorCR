@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
 import { prisma } from '../db';
-import { WhatsAppService } from '../services/whatsapp.service';
 import { WSService } from '../services/ws.service';
 import { AuditService } from '../services/audit.service';
 import { MessageSender, TicketStatus } from '@prisma/client';
+
 
 export class TicketsController {
   static async getTickets(req: Request, res: Response) {
@@ -174,11 +174,12 @@ export class TicketsController {
         details: `Operador respondió al ticket ${ticket.code} vía ${ticket.channel}`
       });
 
-      // Send to recipient via Email or WhatsApp depending on ticket channel
-      if (ticket.channel === 'EMAIL' || ticket.email) {
+      // Send reply to recipient via EmailService
+      const targetEmail = ticket.email || ticket.phone;
+      if (targetEmail) {
         const { EmailService } = await import('../services/email.service');
         const emailResult = await EmailService.sendEmail({
-          to: ticket.email || ticket.phone,
+          to: targetEmail,
           subject: `Re: Ticket Nº ${ticket.code} - Colegio de Fonoaudiólogos`,
           text: body.trim()
         });
@@ -189,19 +190,8 @@ export class TicketsController {
             data: { emailMessageId: emailResult.messageId }
           });
         }
-      } else {
-        const whatsappResult = await WhatsAppService.sendTextMessage({
-          toPhone: ticket.phone,
-          text: `💬 *Respuesta de Colegio de Fonoaudiólogos (Ticket ${ticket.code}):*\n\n${body.trim()}`
-        });
-
-        if (whatsappResult.messageId) {
-          await prisma.message.update({
-            where: { id: message.id },
-            data: { whatsappId: whatsappResult.messageId }
-          });
-        }
       }
+
 
       WSService.broadcast('NEW_MESSAGE', { ticketId: ticket.id, message });
       WSService.broadcast('TICKET_UPDATED', updatedTicket);

@@ -3,10 +3,10 @@ import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './pages/Dashboard';
 import { Affiliates } from './pages/Affiliates';
 import { Login } from './pages/Login';
-import { SimulatorModal } from './components/SimulatorModal';
 import { UsersModal } from './components/UsersModal';
 import { Sun, Moon } from 'lucide-react';
 import { api } from './services/api';
+
 
 export const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
@@ -56,7 +56,7 @@ export const App: React.FC = () => {
       <Sidebar
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
-        onOpenSimulator={() => setIsSimulatorOpen(true)}
+        onOpenSimulator={() => {}}
         onOpenUsers={() => setIsUsersOpen(true)}
         onLogout={handleLogout}
         user={user}
@@ -83,11 +83,6 @@ export const App: React.FC = () => {
         {currentTab === 'tickets' && <Dashboard />}
         {currentTab === 'affiliates' && <Affiliates />}
 
-        <SimulatorModal
-          isOpen={isSimulatorOpen}
-          onClose={() => setIsSimulatorOpen(false)}
-        />
-
         <UsersModal
           isOpen={isUsersOpen}
           onClose={() => setIsUsersOpen(false)}
@@ -95,6 +90,7 @@ export const App: React.FC = () => {
       </div>
     </div>
   );
+
 };
 
 export default App;

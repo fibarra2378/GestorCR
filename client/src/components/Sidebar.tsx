@@ -49,7 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {user?.role === 'ADMIN' && onOpenUsers && (
             <button
               className="nav-item"
-              style={{ width: '100%', marginBottom: '0.5rem', color: '#7BBDE8' }}
+              style={{ width: '100%', marginBottom: '0.75rem', color: '#7BBDE8' }}
               onClick={onOpenUsers}
             >
               <ShieldCheck size={20} />
@@ -57,20 +57,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           )}
 
-          <button
-            className="nav-item"
-            style={{
-              width: '100%',
-              color: '#ffffff',
-              background: 'linear-gradient(135deg, rgba(123, 189, 232, 0.25) 0%, rgba(78, 142, 162, 0.3) 100%)',
-              border: '1px solid rgba(123, 189, 232, 0.4)',
-              marginBottom: '0.75rem'
-            }}
-            onClick={onOpenSimulator}
-          >
-            <Smartphone size={20} style={{ color: '#7BBDE8' }} />
-            <span>Simulador WhatsApp</span>
-          </button>
 
           <div style={{ padding: '0.75rem 1rem', background: 'rgba(0, 29, 57, 0.4)', borderRadius: 'var(--radius-md)', marginBottom: '0.75rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#7BBDE8', fontSize: '0.75rem', fontWeight: 700 }}>
