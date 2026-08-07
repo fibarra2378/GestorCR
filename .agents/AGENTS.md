@@ -11,3 +11,7 @@ Este directorio contiene las definiciones de los roles, skills y el **Workflow C
 - **Software Architect** ([software-architect](file:///c:/Users/Windows/Documents/GestorCR/.agents/skills/software-architect/SKILL.md)): Principios SOLID, arquitectura hexagonal/de capas y escalabilidad.
 - **UX/UI Designer** ([ux-ui-designer](file:///c:/Users/Windows/Documents/GestorCR/.agents/skills/ux-ui-designer/SKILL.md)): Identidad visual institucional, paleta de colores oficial, layout de dashboards e interacción de usuario.
 - **DevOps Engineer** ([devops-engineer](file:///c:/Users/Windows/Documents/GestorCR/.agents/skills/devops-engineer/SKILL.md)): Contenerización Docker, orquestación `docker-compose`, Nginx y paridad de entornos.
+
+## Regla Global de Git:
+Al finalizar la implementación de una funcionalidad o solución de un problema, el asistente siempre consultará al usuario si desea subir los cambios a **`dev`**, **`main`** o **`ambas`** ramas.
+

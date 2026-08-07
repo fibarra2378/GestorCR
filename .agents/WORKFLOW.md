@@ -56,3 +56,5 @@ No todos los requerimientos requieren la intervención de todo el equipo. La sig
 2. **QA Siempre Presente**: Ninguna tarea se considera completa sin la verificación del **QA Engineer** (ejecución de build, lint o pruebas en simulador).
 3. **DevOps bajo demanda**: Las tareas de DevOps solo se activan cuando existan modificaciones en `docker-compose.yml`, `Dockerfile`, `nginx.conf`, scripts de despliegue o variables `.env`.
 4. **UX/UI Guardián de Identidad**: Cualquier cambio en vistas debe validar primero la paleta oficial (`#001D39`, `#0A4174`, `#49769F`, `#4E8EA2`, `#6EA2B3`, `#7BBDE8`, `#BDD8E9`).
+5. **Confirmación de Push a Git**: Al finalizar una tarea o bloque de trabajo, el asistente **DEBE preguntar explícitamente** al usuario si desea subir los cambios a la rama `dev`, a `main` o a `ambas` (`dev` y `main`).
+
