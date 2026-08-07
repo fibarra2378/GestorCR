@@ -25,6 +25,8 @@ services:
       dockerfile: Dockerfile
     container_name: gestorcr-server
     restart: always
+    env_file:
+      - ./server/.env
     environment:
       PORT: 4000
       NODE_ENV: production
@@ -36,6 +38,7 @@ services:
     depends_on:
       - postgres
       - redis
+
 
   client:
     build:
