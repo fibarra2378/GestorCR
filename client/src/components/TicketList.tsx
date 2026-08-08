@@ -74,16 +74,21 @@ export const TicketList: React.FC<TicketListProps> = ({
       </div>
 
       <div className="tickets-scroll-area">
-        {tickets.length === 0 ? (
-          <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <AlertCircle size={32} style={{ marginBottom: '0.5rem', opacity: 0.5 }} />
-            <p style={{ fontSize: '0.9rem' }}>No se encontraron tickets con esos criterios.</p>
-          </div>
-        ) : (
-          tickets.map((ticket) => {
+        {(() => {
+          const safeTickets = Array.isArray(tickets) ? tickets : [];
+          if (safeTickets.length === 0) {
+            return (
+              <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <AlertCircle size={32} style={{ marginBottom: '0.5rem', opacity: 0.5 }} />
+                <p style={{ fontSize: '0.9rem' }}>No se encontraron tickets con esos criterios.</p>
+              </div>
+            );
+          }
+          return safeTickets.map((ticket) => {
             const isSelected = ticket.id === selectedTicketId;
-            const lastMsg = ticket.messages && ticket.messages.length > 0 ? ticket.messages[0].body : '';
+            const lastMsg = ticket.messages && Array.isArray(ticket.messages) && ticket.messages.length > 0 ? ticket.messages[0].body : '';
             const affiliateName = ticket.affiliate ? ticket.affiliate.fullName : 'Afiliado No Identificado';
+
 
             return (
               <div
@@ -118,9 +123,10 @@ export const TicketList: React.FC<TicketListProps> = ({
                 </div>
               </div>
             );
-          })
-        )}
+          });
+        })()}
       </div>
     </div>
   );
 };
+

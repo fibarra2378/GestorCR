@@ -232,23 +232,27 @@ export const Dashboard: React.FC = () => {
 
 
   // KPI Calculations based on allTickets
-  const totalTickets = allTickets.length;
-  const activeTickets = allTickets.filter((t) => t.status === 'NUEVO' || t.status === 'EN_REVISION' || t.status === 'PENDIENTE_AFILIADO').length;
-  const resolvedTickets = allTickets.filter((t) => t.status === 'RESUELTO' || t.status === 'CERRADO').length;
+  const safeAllTickets = Array.isArray(allTickets) ? allTickets : [];
+  const safeTickets = Array.isArray(tickets) ? tickets : [];
+
+  const totalTickets = safeAllTickets.length;
+  const activeTickets = safeAllTickets.filter((t) => t && (t.status === 'NUEVO' || t.status === 'EN_REVISION' || t.status === 'PENDIENTE_AFILIADO')).length;
+  const resolvedTickets = safeAllTickets.filter((t) => t && (t.status === 'RESUELTO' || t.status === 'CERRADO')).length;
   const resolutionRate = totalTickets > 0 ? Math.round((resolvedTickets / totalTickets) * 100) : 100;
 
   // Category Badges & Unattended Count Calculator
   const getCategoryMetrics = (catKey: string) => {
     if (catKey === 'ALL') {
-      const total = allTickets.length;
-      const newCount = allTickets.filter((t) => t.status === 'NUEVO').length;
+      const total = safeAllTickets.length;
+      const newCount = safeAllTickets.filter((t) => t && t.status === 'NUEVO').length;
       return { total, newCount };
     }
-    const filtered = allTickets.filter((t) => t.category === catKey);
+    const filtered = safeAllTickets.filter((t) => t && t.category === catKey);
     const total = filtered.length;
-    const newCount = filtered.filter((t) => t.status === 'NUEVO').length;
+    const newCount = filtered.filter((t) => t && t.status === 'NUEVO').length;
     return { total, newCount };
   };
+
 
   const categories = [
     { key: 'ALL', label: 'Todas las Áreas' },
