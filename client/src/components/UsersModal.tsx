@@ -22,13 +22,17 @@ export const UsersModal: React.FC<UsersModalProps> = ({ isOpen, onClose }) => {
     setLoading(true);
     try {
       const res = await api.get('/users');
-      setUsers(res.data.data);
+      const raw = res?.data;
+      const list = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+      setUsers(list);
     } catch (err: any) {
-      console.error(err);
+      // En hosting estático sin backend, mostrar lista vacía sin error
+      setUsers([]);
     } finally {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     if (isOpen) {
@@ -85,7 +89,7 @@ export const UsersModal: React.FC<UsersModalProps> = ({ isOpen, onClose }) => {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-dark-navy)' }}>
-                Operadores Activos ({users.length})
+                Operadores Activos ({Array.isArray(users) ? users.length : 0})
               </span>
               <button className="btn btn-primary" onClick={() => setShowAddForm(true)} style={{ padding: '0.5rem 0.9rem' }}>
                 <UserPlus size={16} />
@@ -104,7 +108,7 @@ export const UsersModal: React.FC<UsersModalProps> = ({ isOpen, onClose }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((u) => (
+                  {(Array.isArray(users) ? users : []).map((u) => (
                     <tr key={u.id} style={{ borderBottom: '1px solid var(--bg-hover)' }}>
                       <td style={{ padding: '0.75rem 0.8rem', fontWeight: 700, color: 'var(--color-dark-navy)' }}>{u.name}</td>
                       <td style={{ padding: '0.75rem 0.8rem', color: 'var(--text-muted)' }}>@{u.username}</td>
