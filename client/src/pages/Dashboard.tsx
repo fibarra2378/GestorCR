@@ -97,40 +97,57 @@ export const Dashboard: React.FC = () => {
 
   const fetchTickets = async () => {
     try {
+      // Helper para extraer array de cualquier forma de respuesta
+      const extractArray = (res: any): Ticket[] => {
+        const raw = res?.data;
+        if (Array.isArray(raw)) return raw;
+        if (Array.isArray(raw?.data)) return raw.data;
+        return [];
+      };
+
       // 1. Fetch filtered tickets for the list
       const res = await api.get('/tickets', {
         params: {
-          search: searchQuery,
-          status: statusFilter,
+          search: searchQuery || undefined,
+          status: statusFilter !== 'ALL' ? statusFilter : undefined,
           category: categoryFilter !== 'ALL' ? categoryFilter : undefined
         }
       });
-      setTickets(res.data.data);
+      const filteredList = extractArray(res);
 
       // 2. Fetch all tickets without filters to compute global KPI cards & category badges
       const allRes = await api.get('/tickets');
-      setAllTickets(allRes.data.data);
+      const fullList = extractArray(allRes);
+
+      // Validate we got real data, else fallback
+      if (filteredList.length === 0 && fullList.length === 0) {
+        throw new Error('Empty response from API — switching to demo mode');
+      }
+
+      setTickets(filteredList);
+      setAllTickets(fullList);
 
       if (selectedTicket) {
-        const updated = res.data.data.find((t: Ticket) => t.id === selectedTicket.id);
-        if (updated) {
-          fetchTicketDetails(updated.id);
-        }
+        const updated = filteredList.find((t: Ticket) => t.id === selectedTicket.id);
+        if (updated) fetchTicketDetails(updated.id);
       }
     } catch (err) {
-      console.warn('Backend indisponible o en modo hosting estático. Cargando datos demostrativos.');
-      let demoList = MOCK_DEMO_TICKETS;
+      // Fallback: backend offline or static hosting — load demo data
+      console.warn('Backend indisponible. Cargando datos demostrativos.');
+      let demoList = [...MOCK_DEMO_TICKETS];
       if (searchQuery) {
-        demoList = demoList.filter(t => t.code.toLowerCase().includes(searchQuery.toLowerCase()) || t.phone.toLowerCase().includes(searchQuery.toLowerCase()) || (t.affiliate?.fullName || '').toLowerCase().includes(searchQuery.toLowerCase()));
+        const q = searchQuery.toLowerCase();
+        demoList = demoList.filter(t =>
+          t.code.toLowerCase().includes(q) ||
+          t.phone.toLowerCase().includes(q) ||
+          (t.affiliate?.fullName || '').toLowerCase().includes(q)
+        );
       }
-      if (statusFilter !== 'ALL') {
-        demoList = demoList.filter(t => t.status === statusFilter);
-      }
-      if (categoryFilter !== 'ALL') {
-        demoList = demoList.filter(t => t.category === categoryFilter);
-      }
+      if (statusFilter !== 'ALL') demoList = demoList.filter(t => t.status === statusFilter);
+      if (categoryFilter !== 'ALL') demoList = demoList.filter(t => t.category === categoryFilter);
+
       setTickets(demoList);
-      setAllTickets(MOCK_DEMO_TICKETS);
+      setAllTickets([...MOCK_DEMO_TICKETS]);
       if (!selectedTicket && demoList.length > 0) {
         setSelectedTicket(demoList[0]);
       }
@@ -138,6 +155,7 @@ export const Dashboard: React.FC = () => {
       setLoading(false);
     }
   };
+
 
   const fetchTicketDetails = async (id: string) => {
     try {
