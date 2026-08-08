@@ -126,11 +126,6 @@ export const Dashboard: React.FC = () => {
       const allRes = await api.get('/tickets');
       const fullList = extractArray(allRes);
 
-      // Validate we got real data, else fallback
-      if (filteredList.length === 0 && fullList.length === 0) {
-        throw new Error('Empty response from API — switching to demo mode');
-      }
-
       setTickets(filteredList);
       setAllTickets(fullList);
 

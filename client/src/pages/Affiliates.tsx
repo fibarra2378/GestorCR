@@ -22,10 +22,8 @@ export const Affiliates: React.FC = () => {
     setLoading(true);
     try {
       const res = await api.get('/affiliates', { params: { search: search || undefined } });
-      // Defensive: handle both res.data (array) and res.data.data (wrapped)
       const raw = res?.data;
       const list: Affiliate[] = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
-      if (list.length === 0) throw new Error('Empty — switching to demo');
       setAffiliates(list);
     } catch (err) {
       // Fallback demo data
