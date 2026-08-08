@@ -23,6 +23,13 @@ export class WSSubscription {
   static connect() {
     if (this.socket) return;
 
+    // Do not attempt WebSocket on static hosting environments (no backend)
+    const isStaticHosting = (
+      window.location.hostname.includes('web.app') ||
+      window.location.hostname.includes('firebaseapp.com')
+    );
+    if (isStaticHosting) return;
+
     let wsUrl: string;
     if (env.VITE_WS_URL) {
       wsUrl = env.VITE_WS_URL;
