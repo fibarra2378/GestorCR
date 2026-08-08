@@ -284,24 +284,6 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '0.75rem' }}>
-      {/* Demo Mode Banner for Firebase Hosting */}
-      {isStaticHosting && (
-        <div style={{
-          padding: '0.5rem 1rem',
-          backgroundColor: '#fffbeb',
-          border: '1px solid #f59e0b',
-          borderRadius: 'var(--radius-md)',
-          fontSize: '0.82rem',
-          color: '#92400e',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem'
-        }}>
-          <span>⚡</span>
-          <strong>Modo Demostración</strong> — Datos de muestra. El servidor backend no está activo en este entorno.
-          Para gestión real, accede a <strong>http://localhost:3000</strong>
-        </div>
-      )}
       {/* Top KPI Header Row */}
       <div className="kpi-row">
         <div className={`kpi-card kpi-card-gradient-1 ${kpiPulsing ? 'pulse-update' : ''}`}>
@@ -366,13 +348,9 @@ export const Dashboard: React.FC = () => {
 
         <button
           className="btn btn-primary"
-          style={{ marginLeft: 'auto', padding: '0.4rem 0.85rem', fontSize: '0.82rem', opacity: isStaticHosting ? 0.5 : 1 }}
-          title={isStaticHosting ? 'Disponible solo con el servidor activo (localhost:3000)' : 'Exportar CSV'}
-          disabled={isStaticHosting}
+          style={{ marginLeft: 'auto', padding: '0.4rem 0.85rem', fontSize: '0.82rem' }}
           onClick={() => {
-            if (!isStaticHosting) {
-              window.open(`/api/export/tickets-csv?status=${statusFilter}&category=${categoryFilter}`, '_blank');
-            }
+            window.open(`/api/export/tickets-csv?status=${statusFilter}&category=${categoryFilter}`, '_blank');
           }}
         >
           Exportar Reporte CSV
