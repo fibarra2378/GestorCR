@@ -16,13 +16,23 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
 
       - name: Install Dependencies
-        run: npm install
+        run: npm ci
+        working-directory: client
+
+      - name: Clean previous dist
+        run: rm -rf dist
         working-directory: client
 
       - name: Build Application
         run: npm run build
+        working-directory: client
+
+      - name: Verify dist output
+        run: ls -la dist/
         working-directory: client
 
       - name: Deploy Live Channel to Firebase Hosting
@@ -32,3 +42,4 @@ jobs:
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_GESTORCR }}'
           channelId: live
           projectId: gestorcr-app
+          entryPoint: '.'
