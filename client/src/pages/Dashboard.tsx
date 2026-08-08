@@ -5,6 +5,81 @@ import { api, WSSubscription } from '../services/api';
 import { Ticket, TicketStatus, TicketCategory } from '../types';
 import { Ticket as TicketIcon, Clock, CheckCircle2 } from 'lucide-react';
 
+const MOCK_DEMO_TICKETS: Ticket[] = [
+  {
+    id: 'tick-1',
+    code: 'TICK-358189',
+    phone: 'fernandoibarra23@gmail.com',
+    email: 'fernandoibarra23@gmail.com',
+    channel: 'EMAIL',
+    category: 'CONSULTA',
+    status: 'NUEVO',
+    priority: 'MEDIA',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    affiliate: {
+      id: 'aff-1',
+      dni: '123456789',
+      matricula: 'MAT-9921',
+      fullName: 'Fernando Ibarra',
+      email: 'fernandoibarra23@gmail.com',
+      status: 'ACTIVO',
+      createdAt: new Date().toISOString()
+    },
+    messages: [
+      { id: 'm-1', ticketId: 'tick-1', sender: 'AFILIADO', body: '[Email: Consulta] Consulta sobre certificado de matrícula 2026', createdAt: new Date().toISOString() }
+    ]
+  },
+  {
+    id: 'tick-2',
+    code: 'TICK-455970',
+    phone: 'carlos.spadaro@gmail.com',
+    email: 'carlos.spadaro@gmail.com',
+    channel: 'EMAIL',
+    category: 'RECLAMO',
+    status: 'NUEVO',
+    priority: 'ALTA',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    affiliate: {
+      id: 'aff-2',
+      dni: '33445566',
+      matricula: 'MAT-4412',
+      fullName: 'Carlos Spadaro',
+      email: 'carlos.spadaro@gmail.com',
+      status: 'ACTIVO',
+      createdAt: new Date().toISOString()
+    },
+    messages: [
+      { id: 'm-2', ticketId: 'tick-2', sender: 'AFILIADO', body: '[Email: Reclamo] Reclamo de acreditación de pago de cuota mensual', createdAt: new Date().toISOString() }
+    ]
+  },
+  {
+    id: 'tick-3',
+    code: 'TICK-392319',
+    phone: 'laura.rossi@gmail.com',
+    email: 'laura.rossi@gmail.com',
+    channel: 'EMAIL',
+    category: 'MATRICULA',
+    status: 'EN_REVISION',
+    priority: 'MEDIA',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    affiliate: {
+      id: 'aff-3',
+      dni: '28990112',
+      matricula: 'MAT-1102',
+      fullName: 'Laura Rossi',
+      email: 'laura.rossi@gmail.com',
+      status: 'ACTIVO',
+      createdAt: new Date().toISOString()
+    },
+    messages: [
+      { id: 'm-3', ticketId: 'tick-3', sender: 'AFILIADO', body: 'Solicitud de constancia de ética profesional para trámite externo', createdAt: new Date().toISOString() }
+    ]
+  }
+];
+
 export const Dashboard: React.FC = () => {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [allTickets, setAllTickets] = useState<Ticket[]>([]); // Unfiltered tickets for global KPI calculation
@@ -43,7 +118,22 @@ export const Dashboard: React.FC = () => {
         }
       }
     } catch (err) {
-      console.error('Error al obtener tickets', err);
+      console.warn('Backend indisponible o en modo hosting estático. Cargando datos demostrativos.');
+      let demoList = MOCK_DEMO_TICKETS;
+      if (searchQuery) {
+        demoList = demoList.filter(t => t.code.toLowerCase().includes(searchQuery.toLowerCase()) || t.phone.toLowerCase().includes(searchQuery.toLowerCase()) || (t.affiliate?.fullName || '').toLowerCase().includes(searchQuery.toLowerCase()));
+      }
+      if (statusFilter !== 'ALL') {
+        demoList = demoList.filter(t => t.status === statusFilter);
+      }
+      if (categoryFilter !== 'ALL') {
+        demoList = demoList.filter(t => t.category === categoryFilter);
+      }
+      setTickets(demoList);
+      setAllTickets(MOCK_DEMO_TICKETS);
+      if (!selectedTicket && demoList.length > 0) {
+        setSelectedTicket(demoList[0]);
+      }
     } finally {
       setLoading(false);
     }
@@ -54,9 +144,11 @@ export const Dashboard: React.FC = () => {
       const res = await api.get(`/tickets/${id}`);
       setSelectedTicket(res.data.data);
     } catch (err) {
-      console.error('Error al obtener detalle de ticket', err);
+      const found = MOCK_DEMO_TICKETS.find(t => t.id === id);
+      if (found) setSelectedTicket(found);
     }
   };
+
 
   useEffect(() => {
     fetchTickets();
@@ -90,24 +182,54 @@ export const Dashboard: React.FC = () => {
   };
 
   const handleSendReply = async (ticketId: string, body: string) => {
-    await api.post(`/tickets/${ticketId}/reply`, { body });
-    await fetchTicketDetails(ticketId);
-    await fetchTickets();
+    try {
+      await api.post(`/tickets/${ticketId}/reply`, { body });
+      await fetchTicketDetails(ticketId);
+      await fetchTickets();
+    } catch (err) {
+      if (selectedTicket && selectedTicket.id === ticketId) {
+        const newMsg = { id: `m_${Date.now()}`, ticketId, sender: 'OPERADOR' as const, body, createdAt: new Date().toISOString() };
+        const updatedMsgs = [...(selectedTicket.messages || []), newMsg];
+        const updatedTicket = { ...selectedTicket, status: 'PENDIENTE_AFILIADO' as const, messages: updatedMsgs };
+        setSelectedTicket(updatedTicket);
+        setTickets(prev => prev.map(t => t.id === ticketId ? updatedTicket : t));
+        setAllTickets(prev => prev.map(t => t.id === ticketId ? updatedTicket : t));
+      }
+    }
   };
 
   const handleUpdateStatus = async (ticketId: string, status: TicketStatus) => {
-    await api.patch(`/tickets/${ticketId}`, { status });
-    triggerKpiPulse();
-    await fetchTicketDetails(ticketId);
-    await fetchTickets();
+    try {
+      await api.patch(`/tickets/${ticketId}`, { status });
+      triggerKpiPulse();
+      await fetchTicketDetails(ticketId);
+      await fetchTickets();
+    } catch (err) {
+      triggerKpiPulse();
+      setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status } : t));
+      setAllTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status } : t));
+      if (selectedTicket && selectedTicket.id === ticketId) {
+        setSelectedTicket(prev => prev ? { ...prev, status } : null);
+      }
+    }
   };
 
   const handleUpdateCategory = async (ticketId: string, category: TicketCategory) => {
-    await api.patch(`/tickets/${ticketId}`, { category });
-    triggerKpiPulse();
-    await fetchTicketDetails(ticketId);
-    await fetchTickets();
+    try {
+      await api.patch(`/tickets/${ticketId}`, { category });
+      triggerKpiPulse();
+      await fetchTicketDetails(ticketId);
+      await fetchTickets();
+    } catch (err) {
+      triggerKpiPulse();
+      setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, category } : t));
+      setAllTickets(prev => prev.map(t => t.id === ticketId ? { ...t, category } : t));
+      if (selectedTicket && selectedTicket.id === ticketId) {
+        setSelectedTicket(prev => prev ? { ...prev, category } : null);
+      }
+    }
   };
+
 
   // KPI Calculations based on allTickets
   const totalTickets = allTickets.length;

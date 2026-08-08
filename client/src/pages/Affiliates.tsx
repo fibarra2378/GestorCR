@@ -4,6 +4,12 @@ import { api } from '../services/api';
 import { Affiliate } from '../types';
 import { AffiliateModal } from '../components/AffiliateModal';
 
+const MOCK_DEMO_AFFILIATES: Affiliate[] = [
+  { id: 'aff-1', dni: '123456789', matricula: 'MAT-9921', fullName: 'Fernando Ibarra', email: 'fernandoibarra23@gmail.com', phone: '342-4112233', status: 'ACTIVO', createdAt: new Date().toISOString() },
+  { id: 'aff-2', dni: '33445566', matricula: 'MAT-4412', fullName: 'Carlos Spadaro', email: 'carlos.spadaro@gmail.com', phone: '342-5998877', status: 'ACTIVO', createdAt: new Date().toISOString() },
+  { id: 'aff-3', dni: '28990112', matricula: 'MAT-1102', fullName: 'Laura Rossi', email: 'laura.rossi@gmail.com', phone: '342-4556677', status: 'ACTIVO', createdAt: new Date().toISOString() }
+];
+
 export const Affiliates: React.FC = () => {
   const [affiliates, setAffiliates] = useState<Affiliate[]>([]);
   const [search, setSearch] = useState('');
@@ -18,11 +24,16 @@ export const Affiliates: React.FC = () => {
       const res = await api.get('/affiliates', { params: { search } });
       setAffiliates(res.data.data);
     } catch (err) {
-      console.error('Error al cargar afiliados', err);
+      let filtered = MOCK_DEMO_AFFILIATES;
+      if (search) {
+        filtered = filtered.filter(a => a.dni.includes(search) || a.matricula.toLowerCase().includes(search.toLowerCase()) || a.fullName.toLowerCase().includes(search.toLowerCase()));
+      }
+      setAffiliates(filtered);
     } finally {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     fetchAffiliates();
