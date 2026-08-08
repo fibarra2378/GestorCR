@@ -7,8 +7,30 @@ on:
       - dev
 
 jobs:
+  verify_backend:
+    if: '${{ github.event.pull_request.head.repo.full_name == github.repository }}'
+    name: Verify Backend Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Server Dependencies
+        run: npm ci
+        working-directory: server
+
+      - name: Generate Prisma Client & Build Server
+        run: npm run build
+        working-directory: server
+
   build_and_preview:
     if: '${{ github.event.pull_request.head.repo.full_name == github.repository }}'
+    needs: verify_backend
+    name: Build Client & Deploy Preview to Firebase
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +42,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: client/package-lock.json
 
-      - name: Install Dependencies
+      - name: Install Client Dependencies
         run: npm ci
         working-directory: client
 
@@ -28,7 +50,7 @@ jobs:
         run: rm -rf dist
         working-directory: client
 
-      - name: Build Application
+      - name: Build Client Application
         run: npm run build
         working-directory: client
 
@@ -42,4 +64,3 @@ jobs:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_GESTORCR }}'
           projectId: gestorcr-app
-

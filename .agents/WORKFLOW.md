@@ -26,7 +26,7 @@ No todos los requerimientos requieren la intervención de todo el equipo. La sig
           │
           ▼
  ┌─────────────────┐
- │ 1. TRIAGE       │ ──► Identificar tipo de tarea y seleccionar roles mínimos requeridos
+ │ 1. TRIAGE       │ ──► Tech Lead identifica tipo de tarea y selecciona roles mínimos requeridos
  └────────┬────────┘
           │
           ├──► (Si hay cambio estructural) ──► 2A. Software Architect
@@ -52,6 +52,7 @@ No todos los requerimientos requieren la intervención de todo el equipo. La sig
 
 ## 📋 Reglas Ejecutivas del Workflow
 
+0. **Liderazgo Técnico (Tech Lead)**: El **Tech Lead** coordina cada requerimiento, efectúa la asignación de agentes, supervisa los estándares de calidad y vela por la paridad de entornos.
 1. **Principio de Mínima Intervención**: Activar **únicamente** a los agentes estrictamente necesarios según la matriz.
 2. **QA Siempre Presente**: Ninguna tarea se considera completa sin la verificación del **QA Engineer** (ejecución de build, lint o pruebas en simulador).
 3. **DevOps bajo demanda**: Las tareas de DevOps solo se activan cuando existan modificaciones en `docker-compose.yml`, `Dockerfile`, `nginx.conf`, scripts de despliegue o variables `.env`.

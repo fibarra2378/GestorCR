@@ -5,6 +5,7 @@ Este directorio contiene las definiciones de los roles, skills y el **Workflow C
 - **Workflow Óptimo de Desarrollo**: Ver la [Matriz de Activación Condicional de Roles](file:///c:/Users/Windows/Documents/GestorCR/.agents/WORKFLOW.md).
 
 ## Roles del Equipo:
+- **Tech Lead** ([tech-lead](file:///c:/Users/Windows/Documents/GestorCR/.agents/skills/tech-lead/SKILL.md)): Coordinación técnica, triage de requerimientos, orquestación de agentes y control de entregables.
 - **Frontend Developer** ([frontend-developer](file:///c:/Users/Windows/Documents/GestorCR/.agents/skills/frontend-developer/SKILL.md)): Componentes React, TypeScript, gestión de estado y rendimiento.
 - **Backend Developer** ([backend-developer](file:///c:/Users/Windows/Documents/GestorCR/.agents/skills/backend-developer/SKILL.md)): APIs REST, Node.js/Express, Prisma ORM, WebHooks WhatsApp, BullMQ y WebSockets.
 - **QA Engineer** ([qa-engineer](file:///c:/Users/Windows/Documents/GestorCR/.agents/skills/qa-engineer/SKILL.md)): Estrategia de testing, simulador de WhatsApp, contratos API y casos de borde.

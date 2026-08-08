@@ -7,7 +7,28 @@ on:
       - dev
 
 jobs:
+  verify_backend:
+    name: Verify Backend Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Server Dependencies
+        run: npm ci
+        working-directory: server
+
+      - name: Generate Prisma Client & Build Server
+        run: npm run build
+        working-directory: server
+
   build_and_deploy:
+    name: Build Client & Deploy to Firebase
+    needs: verify_backend
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,7 +40,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: client/package-lock.json
 
-      - name: Install Dependencies
+      - name: Install Client Dependencies
         run: npm ci
         working-directory: client
 
@@ -27,7 +48,7 @@ jobs:
         run: rm -rf dist
         working-directory: client
 
-      - name: Build Application
+      - name: Build Client Application
         run: npm run build
         working-directory: client
 
