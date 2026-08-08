@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-export const API_BASE = '/api';
+export const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 export const api = axios.create({
   baseURL: API_BASE
@@ -21,8 +21,14 @@ export class WSSubscription {
   static connect() {
     if (this.socket) return;
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    let wsUrl: string;
+    if (import.meta.env.VITE_WS_URL) {
+      wsUrl = import.meta.env.VITE_WS_URL;
+    } else {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${protocol}//${window.location.host}/ws`;
+    }
+
 
     try {
       this.socket = new WebSocket(wsUrl);
