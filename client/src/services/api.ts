@@ -36,6 +36,10 @@ export class WSSubscription {
     try {
       this.socket = new WebSocket(wsUrl);
 
+      this.socket.onerror = () => {
+        // Silently handle websocket errors on static environments
+      };
+
       this.socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
@@ -47,11 +51,11 @@ export class WSSubscription {
 
       this.socket.onclose = () => {
         this.socket = null;
-        setTimeout(() => this.connect(), 3000);
       };
     } catch (e) {
       // ignore
     }
+
   }
 
   static subscribe(callback: (data: any) => void) {

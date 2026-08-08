@@ -21,11 +21,15 @@ export const App: React.FC = () => {
     const savedUser = localStorage.getItem('gestorcr_user');
 
     if (token && savedUser) {
-      setUser(JSON.parse(savedUser));
-      api.get('/auth/me').catch(() => handleLogout());
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (e) {
+        handleLogout();
+      }
     }
     setLoading(false);
   }, []);
+
 
   const handleLoginSuccess = (userData: any, token: string) => {
     localStorage.setItem('gestorcr_token', token);
