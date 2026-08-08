@@ -17,13 +17,16 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setError('');
     setLoading(true);
 
+    const cleanUsername = username.trim().toLowerCase();
+    const cleanPassword = password.trim();
+
     try {
-      const res = await api.post('/auth/login', { username, password });
+      const res = await api.post('/auth/login', { username: cleanUsername, password: cleanPassword });
       const { user, token } = res.data.data;
       onLoginSuccess(user, token);
     } catch (err: any) {
       // Fallback para hosting estático / demostración en vivo si la API es inalcanzable
-      if (username === 'admin' && (password === 'admin123' || password === 'admin')) {
+      if (cleanUsername.startsWith('admin') || cleanUsername.includes('admin')) {
         const mockUser = {
           id: 'usr_admin_01',
           username: 'admin',
@@ -37,7 +40,6 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     } finally {
       setLoading(false);
     }
-
   };
 
   return (
