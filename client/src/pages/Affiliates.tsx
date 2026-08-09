@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Search, UserPlus, Upload, RefreshCw, AlertCircle, Edit2, Trash2 } from 'lucide-react';
+import { Search, UserPlus, Upload, RefreshCw, AlertCircle, Edit2, Trash2, Users, CheckCircle2, XCircle } from 'lucide-react';
 import { api } from '../services/api';
 import { Affiliate } from '../types';
 import { AffiliateModal } from '../components/AffiliateModal';
+import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 
 const MOCK_DEMO_AFFILIATES: Affiliate[] = [
   { id: 'aff-1', dni: '123456789', matricula: 'MAT-9921', fullName: 'Fernando Ibarra', email: 'fernandoibarra23@gmail.com', phone: '342-4112233', status: 'ACTIVO', createdAt: new Date().toISOString() },
@@ -16,6 +17,8 @@ export const Affiliates: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedAffiliate, setSelectedAffiliate] = useState<Affiliate | undefined>(undefined);
+  const [deleteAffiliateTarget, setDeleteAffiliateTarget] = useState<Affiliate | undefined>(undefined);
+  const [deleting, setDeleting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -75,8 +78,10 @@ export const Affiliates: React.FC = () => {
     setIsAddModalOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('¿Estás seguro de que deseas eliminar este afiliado? Esta acción no se puede deshacer.')) return;
+  const confirmDelete = async () => {
+    if (!deleteAffiliateTarget) return;
+    const id = deleteAffiliateTarget.id;
+    setDeleting(true);
     try {
       await api.delete(`/affiliates/${id}`);
       setAffiliates(prev => {
@@ -91,11 +96,19 @@ export const Affiliates: React.FC = () => {
           return safePrev.filter(a => a.id !== id);
         });
         setMessage('✅ Afiliado eliminado (modo simulación)');
-        return;
+      } else {
+        setMessage(`❌ ${err.response?.data?.error || 'Error al eliminar afiliado'}`);
       }
-      setMessage(`❌ ${err.response?.data?.error || 'Error al eliminar afiliado'}`);
+    } finally {
+      setDeleting(false);
+      setDeleteAffiliateTarget(undefined);
     }
   };
+
+  const safeList = Array.isArray(affiliates) ? affiliates : [];
+  const totalCount = safeList.length;
+  const activeCount = safeList.filter(a => a.status === 'ACTIVO' || !a.status).length;
+  const inactiveCount = safeList.filter(a => a.status === 'INACTIVO' || a.status === 'SUSPENDIDO').length;
 
   return (
     <div style={{ flex: 1, padding: '2rem', overflowY: 'auto' }}>
@@ -121,6 +134,39 @@ export const Affiliates: React.FC = () => {
             <UserPlus size={18} />
             <span>Nuevo Afiliado</span>
           </button>
+        </div>
+      </div>
+
+      {/* KPI Header Cards */}
+      <div className="kpi-row" style={{ marginBottom: '1.5rem' }}>
+        <div className="kpi-card kpi-card-gradient-1">
+          <div>
+            <div className="kpi-val">{totalCount}</div>
+            <div className="kpi-lbl">Total Matriculados</div>
+          </div>
+          <div className="kpi-circle">
+            <Users size={20} />
+          </div>
+        </div>
+
+        <div className="kpi-card kpi-card-gradient-2">
+          <div>
+            <div className="kpi-val">{activeCount}</div>
+            <div className="kpi-lbl">Afiliados Activos</div>
+          </div>
+          <div className="kpi-circle">
+            <CheckCircle2 size={20} />
+          </div>
+        </div>
+
+        <div className="kpi-card">
+          <div>
+            <div className="kpi-val" style={{ color: 'var(--c-navy-dark)' }}>{inactiveCount}</div>
+            <div className="kpi-lbl">Inactivos / Suspendidos</div>
+          </div>
+          <div className="kpi-circle" style={{ borderColor: '#f59e0b', color: '#b45309' }}>
+            <XCircle size={20} />
+          </div>
         </div>
       </div>
 
@@ -186,17 +232,38 @@ export const Affiliates: React.FC = () => {
                     <td>{aff.phone || <span style={{ color: 'var(--text-muted)' }}>No vinculado</span>}</td>
                     <td>{aff.email || '-'}</td>
                     <td>
-                      <span className={`badge ${aff.status === 'ACTIVO' ? 'badge-resuelto' : 'badge-cerrado'}`}>
-                        {aff.status}
-                      </span>
+                      {aff.status === 'SUSPENDIDO' ? (
+                        <span className="badge" style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
+                          SUSPENDIDO
+                        </span>
+                      ) : aff.status === 'INACTIVO' ? (
+                        <span className="badge badge-cerrado">
+                          INACTIVO
+                        </span>
+                      ) : (
+                        <span className="badge badge-resuelto">
+                          ACTIVO
+                        </span>
+                      )}
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button className="btn btn-secondary" style={{ padding: '0.4rem' }} onClick={() => handleEdit(aff)} title="Editar">
-                          <Edit2 size={16} />
+                      <div style={{ display: 'flex', gap: '0.4rem' }}>
+                        <button
+                          className="btn btn-secondary"
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
+                          onClick={() => handleEdit(aff)}
+                          title="Editar Afiliado"
+                        >
+                          <Edit2 size={15} />
+                          <span>Editar</span>
                         </button>
-                        <button className="btn btn-secondary" style={{ padding: '0.4rem', color: '#dc2626' }} onClick={() => handleDelete(aff.id)} title="Eliminar">
-                          <Trash2 size={16} />
+                        <button
+                          className="btn btn-secondary"
+                          style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem', color: '#dc2626', borderColor: '#fca5a5' }}
+                          onClick={() => setDeleteAffiliateTarget(aff)}
+                          title="Eliminar Afiliado"
+                        >
+                          <Trash2 size={15} />
                         </button>
                       </div>
                     </td>
@@ -224,6 +291,13 @@ export const Affiliates: React.FC = () => {
             });
           }
         }}
+      />
+      <ConfirmDeleteModal
+        isOpen={!!deleteAffiliateTarget}
+        affiliate={deleteAffiliateTarget}
+        loading={deleting}
+        onClose={() => setDeleteAffiliateTarget(undefined)}
+        onConfirm={confirmDelete}
       />
     </div>
   );

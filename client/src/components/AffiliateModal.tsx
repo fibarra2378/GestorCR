@@ -16,6 +16,7 @@ export const AffiliateModal: React.FC<AffiliateModalProps> = ({ isOpen, onClose,
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [status, setStatus] = useState<'ACTIVO' | 'INACTIVO' | 'SUSPENDIDO'>('ACTIVO');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -27,12 +28,14 @@ export const AffiliateModal: React.FC<AffiliateModalProps> = ({ isOpen, onClose,
         setFullName(initialData.fullName || '');
         setPhone(initialData.phone || '');
         setEmail(initialData.email || '');
+        setStatus((initialData.status as any) || 'ACTIVO');
       } else {
         setDni('');
         setMatricula('');
         setFullName('');
         setPhone('');
         setEmail('');
+        setStatus('ACTIVO');
       }
       setError('');
     }
@@ -63,7 +66,8 @@ export const AffiliateModal: React.FC<AffiliateModalProps> = ({ isOpen, onClose,
         matricula: trimmedMatricula,
         fullName: trimmedFullName,
         phone: trimmedPhone || undefined,
-        email: trimmedEmail || undefined
+        email: trimmedEmail || undefined,
+        status
       };
 
       if (initialData) {
@@ -85,7 +89,7 @@ export const AffiliateModal: React.FC<AffiliateModalProps> = ({ isOpen, onClose,
           fullName: trimmedFullName,
           phone: trimmedPhone || undefined,
           email: trimmedEmail || undefined,
-          status: initialData ? initialData.status : 'ACTIVO',
+          status: status || (initialData ? initialData.status : 'ACTIVO'),
           createdAt: initialData ? initialData.createdAt : new Date().toISOString()
         };
         onSuccess(mockCreated);
@@ -176,6 +180,39 @@ export const AffiliateModal: React.FC<AffiliateModalProps> = ({ isOpen, onClose,
               onChange={(e) => setEmail(e.target.value)}
               placeholder="valeria@fonoaudiologia.org"
             />
+          </div>
+
+          <div className="form-group" style={{ marginTop: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 600, fontSize: '0.85rem' }}>
+              Estado en Padrón
+            </label>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              {[
+                { id: 'ACTIVO', label: 'Activo', bg: 'var(--c-ice-bg)', color: 'var(--c-navy-rich)' },
+                { id: 'INACTIVO', label: 'Inactivo', bg: '#f3f4f6', color: '#4b5563' },
+                { id: 'SUSPENDIDO', label: 'Suspendido', bg: '#fef3c7', color: '#92400e' }
+              ].map((st) => (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => setStatus(st.id as any)}
+                  style={{
+                    flex: 1,
+                    padding: '0.45rem 0.5rem',
+                    borderRadius: 'var(--radius-pill)',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    border: status === st.id ? '2px solid var(--c-navy-rich)' : '1px solid var(--border)',
+                    backgroundColor: status === st.id ? 'var(--c-navy-rich)' : st.bg,
+                    color: status === st.id ? '#ffffff' : st.color,
+                    transition: 'all 0.2s ease',
+                    boxShadow: status === st.id ? '0 2px 8px rgba(10, 65, 116, 0.25)' : 'none'
+                  }}
+                >
+                  {st.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
