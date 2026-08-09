@@ -27,7 +27,6 @@ export const SimulatorModal: React.FC<SimulatorModalProps> = ({
     setLoading(true);
     const timeStr = new Date().toLocaleTimeString();
     try {
-    try {
       const res = await api.post('/whatsapp/simulate-incoming', {
         phone: phone.trim(),
         message: message.trim()
