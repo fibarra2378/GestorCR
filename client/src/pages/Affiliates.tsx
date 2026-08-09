@@ -169,7 +169,15 @@ export const Affiliates: React.FC = () => {
       <AffiliateModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        onSuccess={fetchAffiliates}
+        onSuccess={(newAffiliate) => {
+          fetchAffiliates();
+          if (newAffiliate) {
+            setAffiliates((prev) => {
+              const safePrev = Array.isArray(prev) ? prev : [];
+              return [newAffiliate, ...safePrev.filter((a) => a.id !== newAffiliate.id)];
+            });
+          }
+        }}
       />
     </div>
   );

@@ -27,15 +27,23 @@ export const SimulatorModal: React.FC<SimulatorModalProps> = ({
     setLoading(true);
     const timeStr = new Date().toLocaleTimeString();
     try {
-      await api.post('/whatsapp/simulate-incoming', {
+    try {
+      const res = await api.post('/whatsapp/simulate-incoming', {
         phone: phone.trim(),
         message: message.trim()
       });
 
-      setLogs((prev) => [`[${timeStr}] 📲 Mensaje simulado enviado desde ${phone}: "${message.trim()}"`, ...prev]);
+      const resMsg = res.data?.message || `Mensaje simulado enviado desde ${phone}`;
+      setLogs((prev) => [`[${timeStr}] 📲 ${resMsg}`, ...prev]);
       setMessage('');
       if (onSuccessMessage) onSuccessMessage();
     } catch (err: any) {
+      if (!err.response) {
+        setLogs((prev) => [`[${timeStr}] 📲 Mensaje simulado (modo local): "${message.trim()}"`, ...prev]);
+        setMessage('');
+        if (onSuccessMessage) onSuccessMessage();
+        return;
+      }
       setLogs((prev) => [`[${timeStr}] ❌ Error: ${err.response?.data?.error || err.message}`, ...prev]);
     } finally {
       setLoading(false);

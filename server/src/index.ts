@@ -43,6 +43,26 @@ app.post('/api/email/simulate-incoming', async (req, res) => {
   });
 });
 
+app.post('/api/whatsapp/simulate-incoming', async (req, res) => {
+  const { phone, message } = req.body;
+  if (!phone || !message) {
+    return res.status(400).json({ success: false, error: 'phone y message son obligatorios' });
+  }
+
+  const result = await EmailWorkerService.processIncomingEmail({
+    fromEmail: `${phone}@whatsapp.simulated`,
+    fromName: `WhatsApp (${phone})`,
+    subject: `Consulta Fonoaudiología: ${String(message).slice(0, 40)}`,
+    body: String(message),
+    emailMessageId: `wa_sim_${Date.now()}`
+  });
+
+  return res.json({
+    success: true,
+    message: `Mensaje simulado procesado correctamente. Ticket asignado: ${result.ticketCode || 'Creado'}`
+  });
+});
+
 
 // Auth Routes
 app.post('/api/auth/login', AuthController.login);
