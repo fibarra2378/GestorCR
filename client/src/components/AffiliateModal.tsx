@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, UserPlus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, UserPlus, Edit2 } from 'lucide-react';
 import { api } from '../services/api';
 import { Affiliate } from '../types';
 
@@ -7,9 +7,10 @@ interface AffiliateModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (newAffiliate?: Affiliate) => void;
+  initialData?: Affiliate;
 }
 
-export const AffiliateModal: React.FC<AffiliateModalProps> = ({ isOpen, onClose, onSuccess }) => {
+export const AffiliateModal: React.FC<AffiliateModalProps> = ({ isOpen, onClose, onSuccess, initialData }) => {
   const [dni, setDni] = useState('');
   const [matricula, setMatricula] = useState('');
   const [fullName, setFullName] = useState('');
@@ -17,6 +18,25 @@ export const AffiliateModal: React.FC<AffiliateModalProps> = ({ isOpen, onClose,
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      if (initialData) {
+        setDni(initialData.dni || '');
+        setMatricula(initialData.matricula || '');
+        setFullName(initialData.fullName || '');
+        setPhone(initialData.phone || '');
+        setEmail(initialData.email || '');
+      } else {
+        setDni('');
+        setMatricula('');
+        setFullName('');
+        setPhone('');
+        setEmail('');
+      }
+      setError('');
+    }
+  }, [isOpen, initialData]);
 
   if (!isOpen) return null;
 
@@ -37,42 +57,39 @@ export const AffiliateModal: React.FC<AffiliateModalProps> = ({ isOpen, onClose,
 
     setLoading(true);
     try {
-      const res = await api.post('/affiliates', {
+      let res;
+      const payload = {
         dni: trimmedDni,
         matricula: trimmedMatricula,
         fullName: trimmedFullName,
         phone: trimmedPhone || undefined,
         email: trimmedEmail || undefined
-      });
+      };
+
+      if (initialData) {
+        res = await api.patch(`/affiliates/${initialData.id}`, payload);
+      } else {
+        res = await api.post('/affiliates', payload);
+      }
 
       const createdAffiliate: Affiliate = res.data?.data || res.data;
       onSuccess(createdAffiliate);
       onClose();
-      setDni('');
-      setMatricula('');
-      setFullName('');
-      setPhone('');
-      setEmail('');
     } catch (err: any) {
       if (!err.response) {
         // Mode without active server / static environment fallback
         const mockCreated: Affiliate = {
-          id: `aff-${Date.now()}`,
+          id: initialData ? initialData.id : `aff-${Date.now()}`,
           dni: trimmedDni,
           matricula: trimmedMatricula,
           fullName: trimmedFullName,
           phone: trimmedPhone || undefined,
           email: trimmedEmail || undefined,
-          status: 'ACTIVO',
-          createdAt: new Date().toISOString()
+          status: initialData ? initialData.status : 'ACTIVO',
+          createdAt: initialData ? initialData.createdAt : new Date().toISOString()
         };
         onSuccess(mockCreated);
         onClose();
-        setDni('');
-        setMatricula('');
-        setFullName('');
-        setPhone('');
-        setEmail('');
         return;
       }
       setError(err.response?.data?.error || 'Error al guardar afiliado');
@@ -86,8 +103,10 @@ export const AffiliateModal: React.FC<AffiliateModalProps> = ({ isOpen, onClose,
       <div className="modal-card">
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <UserPlus style={{ color: 'var(--primary)' }} />
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Nuevo Afiliado al Padrón</h3>
+            {initialData ? <Edit2 style={{ color: 'var(--primary)' }} /> : <UserPlus style={{ color: 'var(--primary)' }} />}
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>
+              {initialData ? 'Editar Afiliado' : 'Nuevo Afiliado al Padrón'}
+            </h3>
           </div>
           <button onClick={onClose} style={{ color: 'var(--text-muted)' }}>
             <X size={20} />
@@ -164,7 +183,7 @@ export const AffiliateModal: React.FC<AffiliateModalProps> = ({ isOpen, onClose,
               Cancelar
             </button>
             <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Guardando...' : 'Registrar Afiliado'}
+              {loading ? 'Guardando...' : (initialData ? 'Guardar Cambios' : 'Registrar Afiliado')}
             </button>
           </div>
         </form>

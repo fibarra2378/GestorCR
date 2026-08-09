@@ -146,6 +146,151 @@ export class AffiliatesController {
     }
   }
 
+  static async updateAffiliate(req: Request, res: Response) {
+    const { id } = req.params;
+    const { dni, matricula, fullName, phone, email, status } = req.body;
+
+    if (!dni || !matricula || !fullName) {
+      return res.status(400).json({ success: false, error: 'DNI, Matrícula y Nombre Completo son obligatorios' });
+    }
+
+    const cleanDni = String(dni).trim().replace(/\D/g, '');
+    const cleanMatricula = String(matricula).trim().toUpperCase();
+    const cleanFullName = String(fullName).trim();
+    const cleanPhone = phone && String(phone).trim() ? String(phone).replace(/\D/g, '') || null : null;
+    const cleanEmail = email && String(email).trim() ? String(email).trim() : null;
+
+    if (!cleanDni) {
+      return res.status(400).json({ success: false, error: 'El DNI debe contener números válidos' });
+    }
+
+    if (!cleanMatricula) {
+      return res.status(400).json({ success: false, error: 'La Matrícula no puede estar vacía' });
+    }
+
+    if (!cleanFullName) {
+      return res.status(400).json({ success: false, error: 'El Nombre Completo no puede estar vacío' });
+    }
+
+    // Validar duplicados en memoria (excluyendo al propio afiliado)
+    const dupInMemory = inMemoryAffiliates.find(a =>
+      a.id !== id && (a.dni === cleanDni || a.matricula === cleanMatricula || (cleanPhone && a.phone === cleanPhone))
+    );
+    if (dupInMemory) {
+      if (dupInMemory.dni === cleanDni) {
+        return res.status(400).json({ success: false, error: 'Ya existe otro afiliado con ese DNI' });
+      }
+      if (dupInMemory.matricula === cleanMatricula) {
+        return res.status(400).json({ success: false, error: 'Ya existe otro afiliado con esa Matrícula' });
+      }
+      if (cleanPhone && dupInMemory.phone === cleanPhone) {
+        return res.status(400).json({ success: false, error: 'Ya existe otro afiliado con ese número de teléfono' });
+      }
+    }
+
+    try {
+      const orConditions: any[] = [
+        { dni: cleanDni },
+        { matricula: cleanMatricula }
+      ];
+      if (cleanPhone) {
+        orConditions.push({ phone: cleanPhone });
+      }
+
+      // Validar duplicados en base de datos
+      const existing = await prisma.affiliate.findFirst({
+        where: {
+          id: { not: id },
+          OR: orConditions
+        }
+      });
+
+      if (existing) {
+        if (existing.dni === cleanDni) {
+          return res.status(400).json({ success: false, error: 'Ya existe otro afiliado con ese DNI' });
+        }
+        if (existing.matricula === cleanMatricula) {
+          return res.status(400).json({ success: false, error: 'Ya existe otro afiliado con esa Matrícula' });
+        }
+        if (cleanPhone && existing.phone === cleanPhone) {
+          return res.status(400).json({ success: false, error: 'Ya existe otro afiliado con ese número de teléfono' });
+        }
+        return res.status(400).json({ success: false, error: 'Ya existe otro afiliado con esos datos' });
+      }
+
+      const updateData: any = {
+        dni: cleanDni,
+        matricula: cleanMatricula,
+        fullName: cleanFullName,
+        phone: cleanPhone,
+        email: cleanEmail
+      };
+      
+      if (status) {
+        updateData.status = status;
+      }
+
+      const affiliate = await prisma.affiliate.update({
+        where: { id },
+        data: updateData
+      });
+
+      // Update in memory fallback array
+      const memIndex = inMemoryAffiliates.findIndex(a => a.id === id);
+      if (memIndex !== -1) {
+        inMemoryAffiliates[memIndex] = { ...inMemoryAffiliates[memIndex], ...affiliate };
+      }
+
+      return res.json({ success: true, data: affiliate });
+    } catch (error: any) {
+      console.warn('[UPDATE AFFILIATE WARNING - USING FALLBACK STORE]', error.message || error);
+      
+      const memIndex = inMemoryAffiliates.findIndex(a => a.id === id);
+      if (memIndex !== -1) {
+        const updatedAffiliate = {
+          ...inMemoryAffiliates[memIndex],
+          dni: cleanDni,
+          matricula: cleanMatricula,
+          fullName: cleanFullName,
+          phone: cleanPhone,
+          email: cleanEmail,
+          ...(status ? { status } : {})
+        };
+        inMemoryAffiliates[memIndex] = updatedAffiliate;
+        return res.json({ success: true, data: updatedAffiliate, fallback: true });
+      }
+      
+      return res.status(404).json({ success: false, error: 'Afiliado no encontrado en memoria' });
+    }
+  }
+
+  static async deleteAffiliate(req: Request, res: Response) {
+    const { id } = req.params;
+
+    try {
+      await prisma.affiliate.delete({
+        where: { id }
+      });
+      
+      const memIndex = inMemoryAffiliates.findIndex(a => a.id === id);
+      if (memIndex !== -1) {
+        inMemoryAffiliates.splice(memIndex, 1);
+      }
+
+      return res.json({ success: true, message: 'Afiliado eliminado correctamente' });
+    } catch (error: any) {
+      console.warn('[DELETE AFFILIATE WARNING - USING FALLBACK STORE]', error.message || error);
+      
+      const memIndex = inMemoryAffiliates.findIndex(a => a.id === id);
+      if (memIndex !== -1) {
+        inMemoryAffiliates.splice(memIndex, 1);
+        return res.json({ success: true, message: 'Afiliado eliminado correctamente (en memoria)', fallback: true });
+      }
+      
+      return res.status(404).json({ success: false, error: 'Afiliado no encontrado' });
+    }
+  }
+
   static async importCSV(req: Request, res: Response) {
     try {
       if (!req.file) {

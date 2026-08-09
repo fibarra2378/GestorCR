@@ -87,6 +87,8 @@ app.get('/api/audit-logs', TicketsController.getAuditLogs);
 // Affiliates Routes
 app.get('/api/affiliates', AffiliatesController.getAffiliates);
 app.post('/api/affiliates', AffiliatesController.createAffiliate);
+app.patch('/api/affiliates/:id', AffiliatesController.updateAffiliate);
+app.delete('/api/affiliates/:id', AffiliatesController.deleteAffiliate);
 app.post('/api/affiliates/import-csv', upload.single('file'), AffiliatesController.importCSV);
 
 // Healthcheck

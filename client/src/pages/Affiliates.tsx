@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, UserPlus, Upload, RefreshCw, AlertCircle } from 'lucide-react';
+import { Search, UserPlus, Upload, RefreshCw, AlertCircle, Edit2, Trash2 } from 'lucide-react';
 import { api } from '../services/api';
 import { Affiliate } from '../types';
 import { AffiliateModal } from '../components/AffiliateModal';
@@ -15,6 +15,7 @@ export const Affiliates: React.FC = () => {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [selectedAffiliate, setSelectedAffiliate] = useState<Affiliate | undefined>(undefined);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -69,6 +70,33 @@ export const Affiliates: React.FC = () => {
     }
   };
 
+  const handleEdit = (affiliate: Affiliate) => {
+    setSelectedAffiliate(affiliate);
+    setIsAddModalOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('¿Estás seguro de que deseas eliminar este afiliado? Esta acción no se puede deshacer.')) return;
+    try {
+      await api.delete(`/affiliates/${id}`);
+      setAffiliates(prev => {
+        const safePrev = Array.isArray(prev) ? prev : [];
+        return safePrev.filter(a => a.id !== id);
+      });
+      setMessage('✅ Afiliado eliminado correctamente');
+    } catch (err: any) {
+      if (!err.response) {
+        setAffiliates(prev => {
+          const safePrev = Array.isArray(prev) ? prev : [];
+          return safePrev.filter(a => a.id !== id);
+        });
+        setMessage('✅ Afiliado eliminado (modo simulación)');
+        return;
+      }
+      setMessage(`❌ ${err.response?.data?.error || 'Error al eliminar afiliado'}`);
+    }
+  };
+
   return (
     <div style={{ flex: 1, padding: '2rem', overflowY: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
@@ -86,7 +114,10 @@ export const Affiliates: React.FC = () => {
             <input type="file" accept=".csv" style={{ display: 'none' }} onChange={handleFileUpload} disabled={uploading} />
           </label>
 
-          <button className="btn btn-primary" onClick={() => setIsAddModalOpen(true)}>
+          <button className="btn btn-primary" onClick={() => {
+            setSelectedAffiliate(undefined);
+            setIsAddModalOpen(true);
+          }}>
             <UserPlus size={18} />
             <span>Nuevo Afiliado</span>
           </button>
@@ -139,6 +170,7 @@ export const Affiliates: React.FC = () => {
                   <th>Teléfono</th>
                   <th>Email</th>
                   <th>Estado</th>
+                  <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -158,6 +190,16 @@ export const Affiliates: React.FC = () => {
                         {aff.status}
                       </span>
                     </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button className="btn btn-secondary" style={{ padding: '0.4rem' }} onClick={() => handleEdit(aff)} title="Editar">
+                          <Edit2 size={16} />
+                        </button>
+                        <button className="btn btn-secondary" style={{ padding: '0.4rem', color: '#dc2626' }} onClick={() => handleDelete(aff.id)} title="Eliminar">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -168,7 +210,11 @@ export const Affiliates: React.FC = () => {
 
       <AffiliateModal
         isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
+        initialData={selectedAffiliate}
+        onClose={() => {
+          setIsAddModalOpen(false);
+          setSelectedAffiliate(undefined);
+        }}
         onSuccess={(newAffiliate) => {
           fetchAffiliates();
           if (newAffiliate) {
