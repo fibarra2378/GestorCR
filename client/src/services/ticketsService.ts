@@ -6,6 +6,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { api, WSSubscription } from './api';
 import { Ticket, TicketStatus, TicketCategory, TicketPriority, Message } from '../types';
 
 const STORAGE_KEY = 'gestorcr_tickets_store_v1';
@@ -115,9 +116,26 @@ export class TicketsService {
     });
   }
 
+  /**
+   * Fetch tickets from REST API backend if active
+   */
+  public static async refreshFromBackend(): Promise<void> {
+    try {
+      const res = await api.get('/tickets');
+      const raw = res?.data;
+      const list: Ticket[] = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+      if (list && list.length > 0) {
+        this.saveToStorage(list);
+      }
+    } catch {
+      // Backend not available (pure static hosting)
+    }
+  }
+
   public static subscribeTickets(callback: (tickets: Ticket[]) => void): () => void {
     this.listeners.push(callback);
 
+    // Initial instant push from persistent storage
     const current = this.loadFromStorage();
     callback(
       [...current].sort(
@@ -125,6 +143,18 @@ export class TicketsService {
       )
     );
 
+    // Fetch from backend API
+    this.refreshFromBackend();
+
+    // WebSocket real-time connection for backend events (e.g. Email IMAP worker)
+    WSSubscription.connect();
+    const unsubscribeWS = WSSubscription.subscribe((event) => {
+      if (event.type === 'NEW_TICKET' || event.type === 'TICKET_UPDATED' || event.type === 'NEW_MESSAGE') {
+        this.refreshFromBackend();
+      }
+    });
+
+    // Cross-tab synchronization
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY && e.newValue) {
         try {
@@ -139,6 +169,7 @@ export class TicketsService {
     };
     window.addEventListener('storage', handleStorageChange);
 
+    // Background Firestore real-time listener attempt
     let unsubscribeFirestore = () => {};
     try {
       if (db) {
@@ -166,11 +197,18 @@ export class TicketsService {
     return () => {
       this.listeners = this.listeners.filter((l) => l !== callback);
       window.removeEventListener('storage', handleStorageChange);
+      unsubscribeWS();
       unsubscribeFirestore();
     };
   }
 
   public static async getTicketById(id: string): Promise<Ticket | null> {
+    try {
+      const res = await api.get(`/tickets/${id}`);
+      if (res.data?.data) return res.data.data;
+    } catch {
+      // ignore
+    }
     const list = this.loadFromStorage();
     return list.find((t) => t.id === id) || null;
   }
@@ -181,6 +219,14 @@ export class TicketsService {
     const updated = list.map((t) => (t.id === id ? { ...t, status, updatedAt: now } : t));
     this.saveToStorage(updated);
 
+    // REST API call
+    try {
+      await api.patch(`/tickets/${id}`, { status });
+    } catch {
+      // ignore
+    }
+
+    // Firestore sync
     try {
       if (db) {
         const docRef = doc(db, COLLECTION_NAME, id);
@@ -197,6 +243,14 @@ export class TicketsService {
     const updated = list.map((t) => (t.id === id ? { ...t, category, updatedAt: now } : t));
     this.saveToStorage(updated);
 
+    // REST API call
+    try {
+      await api.patch(`/tickets/${id}`, { category });
+    } catch {
+      // ignore
+    }
+
+    // Firestore sync
     try {
       if (db) {
         const docRef = doc(db, COLLECTION_NAME, id);
@@ -229,6 +283,14 @@ export class TicketsService {
 
     this.saveToStorage(updated);
 
+    // Send via REST API so backend delivers actual email via SMTP
+    try {
+      await api.post(`/tickets/${ticketId}/reply`, { body: replyText.trim() });
+    } catch {
+      // ignore
+    }
+
+    // Firestore sync
     try {
       if (db) {
         const docRef = doc(db, COLLECTION_NAME, ticketId);

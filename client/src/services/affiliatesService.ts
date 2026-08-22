@@ -8,6 +8,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { api } from './api';
 import { Affiliate } from '../types';
 
 const STORAGE_KEY = 'gestorcr_affiliates_store_v1';
@@ -49,9 +50,6 @@ const INITIAL_AFFILIATES: Affiliate[] = [
 export class AffiliatesService {
   private static listeners: Array<(affiliates: Affiliate[]) => void> = [];
 
-  /**
-   * Load current affiliates from persistent storage
-   */
   private static loadFromStorage(): Affiliate[] {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -64,14 +62,10 @@ export class AffiliatesService {
     } catch {
       // ignore
     }
-    // Default initial seed
     this.saveToStorage(INITIAL_AFFILIATES);
     return INITIAL_AFFILIATES;
   }
 
-  /**
-   * Save affiliates to persistent storage and notify listeners
-   */
   private static saveToStorage(list: Affiliate[]) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
@@ -92,17 +86,28 @@ export class AffiliatesService {
     });
   }
 
-  /**
-   * Real-time subscription to affiliates
-   */
+  public static async refreshFromBackend(): Promise<void> {
+    try {
+      const res = await api.get('/affiliates');
+      const raw = res?.data;
+      const list: Affiliate[] = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+      if (list && list.length > 0) {
+        this.saveToStorage(list);
+      }
+    } catch {
+      // Backend not reachable
+    }
+  }
+
   public static subscribeAffiliates(callback: (affiliates: Affiliate[]) => void): () => void {
     this.listeners.push(callback);
 
-    // Initial instant push from persistent storage
     const current = this.loadFromStorage();
     callback([...current].sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '')));
 
-    // Cross-tab synchronization listener
+    // Refresh from backend DB
+    this.refreshFromBackend();
+
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY && e.newValue) {
         try {
@@ -117,7 +122,6 @@ export class AffiliatesService {
     };
     window.addEventListener('storage', handleStorageChange);
 
-    // Background Firestore real-time listener attempt
     let unsubscribeFirestore = () => {};
     try {
       if (db) {
@@ -142,9 +146,7 @@ export class AffiliatesService {
               this.saveToStorage(remoteList);
             }
           },
-          () => {
-            // Firestore not ready or permissions - fallback to persistent storage
-          }
+          () => {}
         );
       }
     } catch {
@@ -158,9 +160,6 @@ export class AffiliatesService {
     };
   }
 
-  /**
-   * Get all affiliates
-   */
   public static async getAffiliates(searchQuery?: string): Promise<Affiliate[]> {
     let list = this.loadFromStorage();
 
@@ -178,9 +177,6 @@ export class AffiliatesService {
     return [...list].sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
   }
 
-  /**
-   * Create a new affiliate (instant zero-failure write)
-   */
   public static async createAffiliate(data: Omit<Affiliate, 'id' | 'createdAt'>): Promise<Affiliate> {
     const list = this.loadFromStorage();
     const now = new Date().toISOString();
@@ -197,7 +193,6 @@ export class AffiliatesService {
       createdAt: now
     };
 
-    // Check duplicate DNI or Matrícula in local store
     const existingIndex = list.findIndex(
       (a) => a.dni === newAffiliate.dni || a.matricula.toLowerCase() === newAffiliate.matricula.toLowerCase()
     );
@@ -210,10 +205,16 @@ export class AffiliatesService {
       updatedList = [newAffiliate, ...list];
     }
 
-    // Save locally immediately
     this.saveToStorage(updatedList);
 
-    // Sync to Firestore in background
+    // REST API call
+    try {
+      await api.post('/affiliates', newAffiliate);
+    } catch {
+      // ignore
+    }
+
+    // Firestore sync
     try {
       if (db) {
         const colRef = collection(db, COLLECTION_NAME);
@@ -227,15 +228,19 @@ export class AffiliatesService {
     return newAffiliate;
   }
 
-  /**
-   * Update an existing affiliate
-   */
   public static async updateAffiliate(id: string, data: Partial<Affiliate>): Promise<void> {
     const list = this.loadFromStorage();
     const updatedList = list.map((a) => (a.id === id ? { ...a, ...data } : a));
     this.saveToStorage(updatedList);
 
-    // Sync to Firestore in background
+    // REST API call
+    try {
+      await api.patch(`/affiliates/${id}`, data);
+    } catch {
+      // ignore
+    }
+
+    // Firestore sync
     try {
       if (db) {
         const docRef = doc(db, COLLECTION_NAME, id);
@@ -248,15 +253,19 @@ export class AffiliatesService {
     }
   }
 
-  /**
-   * Delete an affiliate
-   */
   public static async deleteAffiliate(id: string): Promise<void> {
     const list = this.loadFromStorage();
     const updatedList = list.filter((a) => a.id !== id);
     this.saveToStorage(updatedList);
 
-    // Sync to Firestore in background
+    // REST API call
+    try {
+      await api.delete(`/affiliates/${id}`);
+    } catch {
+      // ignore
+    }
+
+    // Firestore sync
     try {
       if (db) {
         const docRef = doc(db, COLLECTION_NAME, id);
@@ -267,9 +276,6 @@ export class AffiliatesService {
     }
   }
 
-  /**
-   * Import affiliates from CSV text
-   */
   public static async importFromCSVText(csvText: string): Promise<{ created: number; skipped: number }> {
     const lines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0);
     if (lines.length <= 1) return { created: 0, skipped: 0 };
