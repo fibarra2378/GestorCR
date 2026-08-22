@@ -41,7 +41,7 @@ jobs:
           cache-dependency-path: client/package-lock.json
 
       - name: Install Client Dependencies
-        run: npm ci
+        run: npm install
         working-directory: client
 
       - name: Clean previous dist
