@@ -1,14 +1,13 @@
 import {
   collection,
   doc,
-  getDocs,
-  getDoc,
   setDoc,
   deleteDoc
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { User } from '../types';
 
+const STORAGE_KEY = 'gestorcr_users_store_v1';
 const COLLECTION_NAME = 'users';
 
 const INITIAL_USERS: (User & { passwordHash: string })[] = [
@@ -29,102 +28,79 @@ const INITIAL_USERS: (User & { passwordHash: string })[] = [
 ];
 
 export class AuthService {
-  private static isSeeding = false;
-
-  public static async autoSeedIfEmpty() {
-    if (this.isSeeding) return;
+  private static loadFromStorage(): (User & { passwordHash: string })[] {
     try {
-      const colRef = collection(db, COLLECTION_NAME);
-      const snap = await getDocs(colRef);
-      if (snap.empty) {
-        this.isSeeding = true;
-        for (const u of INITIAL_USERS) {
-          const docRef = doc(colRef, u.id);
-          await setDoc(docRef, u);
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
         }
-        this.isSeeding = false;
       }
     } catch {
-      this.isSeeding = false;
+      // ignore
+    }
+    this.saveToStorage(INITIAL_USERS);
+    return INITIAL_USERS;
+  }
+
+  private static saveToStorage(list: (User & { passwordHash: string })[]) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    } catch {
+      // ignore
     }
   }
 
-  public static async login(username: string, password: string):Promise<{ user: User; token: string } | null> {
-    await this.autoSeedIfEmpty();
+  public static async login(username: string, password: string): Promise<{ user: User; token: string } | null> {
     const cleanUser = username.trim().toLowerCase();
+    const list = this.loadFromStorage();
 
-    // 1. Direct match with initial demo users
-    const fallbackUser = INITIAL_USERS.find(
-      (u) => u.username.toLowerCase() === cleanUser && u.passwordHash === password
+    const found = list.find(
+      (u) => (u.username || '').toLowerCase() === cleanUser && u.passwordHash === password
     );
 
-    try {
-      const colRef = collection(db, COLLECTION_NAME);
-      const snap = await getDocs(colRef);
-      const foundDoc = snap.docs.find((d) => {
-        const data = d.data();
-        return (data.username || '').toLowerCase() === cleanUser && data.passwordHash === password;
-      });
-
-      if (foundDoc) {
-        const data = foundDoc.data();
-        const user: User = {
-          id: foundDoc.id,
-          username: data.username,
-          name: data.name,
-          role: data.role || 'OPERADOR'
-        };
-        const token = `firebase_token_${user.id}_${Date.now()}`;
-        return { user, token };
-      }
-    } catch (e) {
-      console.warn('[AuthService] Fallback a credenciales locales:', e);
-    }
-
-    if (fallbackUser) {
+    if (found) {
       const user: User = {
-        id: fallbackUser.id,
-        username: fallbackUser.username,
-        name: fallbackUser.name,
-        role: fallbackUser.role
+        id: found.id,
+        username: found.username,
+        name: found.name,
+        role: found.role
       };
-      return { user, token: `local_token_${fallbackUser.id}` };
+      return { user, token: `token_${found.id}_${Date.now()}` };
     }
 
     return null;
   }
 
   public static async getUsers(): Promise<User[]> {
-    await this.autoSeedIfEmpty();
-    try {
-      const colRef = collection(db, COLLECTION_NAME);
-      const snap = await getDocs(colRef);
-      return snap.docs.map((d) => {
-        const data = d.data();
-        return {
-          id: d.id,
-          username: data.username,
-          name: data.name,
-          role: data.role || 'OPERADOR'
-        };
-      });
-    } catch {
-      return INITIAL_USERS.map(({ passwordHash, ...u }) => u);
-    }
+    const list = this.loadFromStorage();
+    return list.map(({ passwordHash, ...u }) => u);
   }
 
   public static async createUser(data: { username: string; password: string; name: string; role: 'ADMIN' | 'OPERADOR' }): Promise<User> {
-    const colRef = collection(db, COLLECTION_NAME);
-    const newDocRef = doc(colRef);
+    const list = this.loadFromStorage();
+    const id = `user-${Date.now()}`;
     const newUser = {
-      id: newDocRef.id,
+      id,
       username: data.username.trim(),
       passwordHash: data.password,
       name: data.name.trim(),
       role: data.role
     };
 
-    await setDoc(newDocRef, newUser);
+    const updated = [...list, newUser];
+    this.saveToStorage(updated);
+
+    try {
+      if (db) {
+        const docRef = doc(collection(db, COLLECTION_NAME), id);
+        setDoc(docRef, newUser).catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+
     return {
       id: newUser.id,
       username: newUser.username,
@@ -134,7 +110,17 @@ export class AuthService {
   }
 
   public static async deleteUser(id: string): Promise<void> {
-    const docRef = doc(db, COLLECTION_NAME, id);
-    await deleteDoc(docRef);
+    const list = this.loadFromStorage();
+    const updated = list.filter((u) => u.id !== id);
+    this.saveToStorage(updated);
+
+    try {
+      if (db) {
+        const docRef = doc(db, COLLECTION_NAME, id);
+        deleteDoc(docRef).catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
   }
 }

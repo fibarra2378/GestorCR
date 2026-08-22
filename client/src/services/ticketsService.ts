@@ -1,17 +1,14 @@
 import {
   collection,
   doc,
-  getDocs,
-  getDoc,
   setDoc,
   updateDoc,
-  onSnapshot,
-  query,
-  orderBy
+  onSnapshot
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Ticket, TicketStatus, TicketCategory, TicketPriority, Message } from '../types';
 
+const STORAGE_KEY = 'gestorcr_tickets_store_v1';
 const COLLECTION_NAME = 'tickets';
 
 const INITIAL_TICKETS: Ticket[] = [
@@ -78,106 +75,144 @@ const INITIAL_TICKETS: Ticket[] = [
 ];
 
 export class TicketsService {
-  private static isSeeding = false;
+  private static listeners: Array<(tickets: Ticket[]) => void> = [];
 
-  /**
-   * Auto-seed Firestore collection if it's empty
-   */
-  public static async autoSeedIfEmpty() {
-    if (this.isSeeding) return;
+  private static loadFromStorage(): Ticket[] {
     try {
-      const colRef = collection(db, COLLECTION_NAME);
-      const snapshot = await getDocs(colRef);
-      if (snapshot.empty) {
-        this.isSeeding = true;
-        for (const t of INITIAL_TICKETS) {
-          const newDocRef = doc(colRef, t.id);
-          await setDoc(newDocRef, t);
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
         }
-        this.isSeeding = false;
       }
-    } catch (e) {
-      console.warn('[Firestore] Error en auto-seed de tickets:', e);
-      this.isSeeding = false;
+    } catch {
+      // ignore
     }
+    this.saveToStorage(INITIAL_TICKETS);
+    return INITIAL_TICKETS;
   }
 
-  /**
-   * Real-time listener for all tickets
-   */
+  private static saveToStorage(list: Ticket[]) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    } catch {
+      // ignore
+    }
+    this.notifyListeners(list);
+  }
+
+  private static notifyListeners(list: Ticket[]) {
+    const sorted = [...list].sort(
+      (a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
+    );
+    this.listeners.forEach((cb) => {
+      try {
+        cb(sorted);
+      } catch (e) {
+        console.error(e);
+      }
+    });
+  }
+
   public static subscribeTickets(callback: (tickets: Ticket[]) => void): () => void {
-    this.autoSeedIfEmpty();
-    const colRef = collection(db, COLLECTION_NAME);
+    this.listeners.push(callback);
+
+    const current = this.loadFromStorage();
+    callback(
+      [...current].sort(
+        (a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
+      )
+    );
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            this.notifyListeners(parsed);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    let unsubscribeFirestore = () => {};
+    try {
+      if (db) {
+        const colRef = collection(db, COLLECTION_NAME);
+        unsubscribeFirestore = onSnapshot(
+          colRef,
+          (snapshot) => {
+            if (!snapshot.empty) {
+              const remoteList: Ticket[] = snapshot.docs.map((docSnap) => ({
+                ...(docSnap.data() as Ticket),
+                id: docSnap.id
+              }));
+              this.saveToStorage(remoteList);
+            }
+          },
+          () => {
+            // fallback quietly
+          }
+        );
+      }
+    } catch {
+      // ignore
+    }
+
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== callback);
+      window.removeEventListener('storage', handleStorageChange);
+      unsubscribeFirestore();
+    };
+  }
+
+  public static async getTicketById(id: string): Promise<Ticket | null> {
+    const list = this.loadFromStorage();
+    return list.find((t) => t.id === id) || null;
+  }
+
+  public static async updateStatus(id: string, status: TicketStatus): Promise<void> {
+    const list = this.loadFromStorage();
+    const now = new Date().toISOString();
+    const updated = list.map((t) => (t.id === id ? { ...t, status, updatedAt: now } : t));
+    this.saveToStorage(updated);
 
     try {
-      const unsubscribe = onSnapshot(colRef, (snapshot) => {
-        if (snapshot.empty && !this.isSeeding) {
-          this.autoSeedIfEmpty();
-        }
-        const list: Ticket[] = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data() as Ticket;
-          return {
-            ...data,
-            id: docSnap.id
-          };
-        });
-
-        // Sort by updatedAt descending
-        list.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
-        callback(list);
-      }, (error) => {
-        console.warn('[Firestore] Error en listener de tickets:', error);
-      });
-
-      return unsubscribe;
-    } catch (e) {
-      console.warn('[Firestore] Fallback en listener de tickets:', e);
-      return () => {};
+      if (db) {
+        const docRef = doc(db, COLLECTION_NAME, id);
+        updateDoc(docRef, { status, updatedAt: now }).catch(() => {});
+      }
+    } catch {
+      // ignore
     }
   }
 
-  /**
-   * Get ticket details
-   */
-  public static async getTicketById(id: string): Promise<Ticket | null> {
-    const docRef = doc(db, COLLECTION_NAME, id);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) return null;
-    return { ...snap.data(), id: snap.id } as Ticket;
-  }
-
-  /**
-   * Update ticket status
-   */
-  public static async updateStatus(id: string, status: TicketStatus): Promise<void> {
-    const docRef = doc(db, COLLECTION_NAME, id);
-    await updateDoc(docRef, {
-      status,
-      updatedAt: new Date().toISOString()
-    });
-  }
-
-  /**
-   * Update ticket category
-   */
   public static async updateCategory(id: string, category: TicketCategory): Promise<void> {
-    const docRef = doc(db, COLLECTION_NAME, id);
-    await updateDoc(docRef, {
-      category,
-      updatedAt: new Date().toISOString()
-    });
+    const list = this.loadFromStorage();
+    const now = new Date().toISOString();
+    const updated = list.map((t) => (t.id === id ? { ...t, category, updatedAt: now } : t));
+    this.saveToStorage(updated);
+
+    try {
+      if (db) {
+        const docRef = doc(db, COLLECTION_NAME, id);
+        updateDoc(docRef, { category, updatedAt: now }).catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
   }
 
-  /**
-   * Send operator reply to a ticket
-   */
   public static async sendReply(ticketId: string, replyText: string): Promise<void> {
-    const docRef = doc(db, COLLECTION_NAME, ticketId);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) return;
-
-    const currentTicket = snap.data() as Ticket;
+    const list = this.loadFromStorage();
     const now = new Date().toISOString();
+
+    const target = list.find((t) => t.id === ticketId);
+    if (!target) return;
 
     const newMsg: Message = {
       id: `msg-${Date.now()}`,
@@ -187,18 +222,27 @@ export class TicketsService {
       createdAt: now
     };
 
-    const messages = [...(currentTicket.messages || []), newMsg];
+    const messages = [...(target.messages || []), newMsg];
+    const updated = list.map((t) =>
+      t.id === ticketId ? { ...t, messages, status: 'PENDIENTE_AFILIADO' as TicketStatus, updatedAt: now } : t
+    );
 
-    await updateDoc(docRef, {
-      messages,
-      status: 'PENDIENTE_AFILIADO' as TicketStatus,
-      updatedAt: now
-    });
+    this.saveToStorage(updated);
+
+    try {
+      if (db) {
+        const docRef = doc(db, COLLECTION_NAME, ticketId);
+        updateDoc(docRef, {
+          messages,
+          status: 'PENDIENTE_AFILIADO',
+          updatedAt: now
+        }).catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
   }
 
-  /**
-   * Create a new ticket (e.g. from affiliate or internal)
-   */
   public static async createTicket(payload: {
     category: TicketCategory;
     priority?: TicketPriority;
@@ -207,13 +251,13 @@ export class TicketsService {
     email?: string;
     phone?: string;
   }): Promise<Ticket> {
-    const colRef = collection(db, COLLECTION_NAME);
-    const newDocRef = doc(colRef);
+    const list = this.loadFromStorage();
     const now = new Date().toISOString();
+    const id = `tick-${Date.now()}`;
     const code = `TICK-${Math.floor(100000 + Math.random() * 900000)}`;
 
     const newTicket: Ticket = {
-      id: newDocRef.id,
+      id,
       code,
       phone: payload.phone || payload.affiliate?.phone || 'Sin teléfono',
       email: payload.email || payload.affiliate?.email || undefined,
@@ -228,7 +272,7 @@ export class TicketsService {
       messages: [
         {
           id: `msg-${Date.now()}`,
-          ticketId: newDocRef.id,
+          ticketId: id,
           sender: 'AFILIADO',
           body: payload.initialMessage,
           createdAt: now
@@ -236,7 +280,18 @@ export class TicketsService {
       ]
     };
 
-    await setDoc(newDocRef, newTicket);
+    const updated = [newTicket, ...list];
+    this.saveToStorage(updated);
+
+    try {
+      if (db) {
+        const docRef = doc(collection(db, COLLECTION_NAME), id);
+        setDoc(docRef, newTicket).catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+
     return newTicket;
   }
 }

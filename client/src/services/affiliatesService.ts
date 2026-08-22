@@ -2,22 +2,20 @@ import {
   collection,
   doc,
   getDocs,
-  getDoc,
   setDoc,
   updateDoc,
   deleteDoc,
-  onSnapshot,
-  query,
-  orderBy,
-  serverTimestamp
+  onSnapshot
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Affiliate } from '../types';
 
+const STORAGE_KEY = 'gestorcr_affiliates_store_v1';
 const COLLECTION_NAME = 'affiliates';
 
-const INITIAL_AFFILIATES: Omit<Affiliate, 'id'>[] = [
+const INITIAL_AFFILIATES: Affiliate[] = [
   {
+    id: 'aff-init-1',
     dni: '26596615',
     matricula: '1340',
     fullName: 'Fernando Ibarra',
@@ -27,6 +25,7 @@ const INITIAL_AFFILIATES: Omit<Affiliate, 'id'>[] = [
     createdAt: new Date().toISOString()
   },
   {
+    id: 'aff-init-2',
     dni: '28999111',
     matricula: 'M-0855',
     fullName: 'Lic. Carlos Roberto Spadaro',
@@ -36,6 +35,7 @@ const INITIAL_AFFILIATES: Omit<Affiliate, 'id'>[] = [
     createdAt: new Date().toISOString()
   },
   {
+    id: 'aff-init-3',
     dni: '32456789',
     matricula: 'M-1042',
     fullName: 'Dra. María Elena Gómez',
@@ -47,95 +47,122 @@ const INITIAL_AFFILIATES: Omit<Affiliate, 'id'>[] = [
 ];
 
 export class AffiliatesService {
-  private static isSeeding = false;
+  private static listeners: Array<(affiliates: Affiliate[]) => void> = [];
 
   /**
-   * Auto-seed Firestore collection if it's empty
+   * Load current affiliates from persistent storage
    */
-  public static async autoSeedIfEmpty() {
-    if (this.isSeeding) return;
+  private static loadFromStorage(): Affiliate[] {
     try {
-      const colRef = collection(db, COLLECTION_NAME);
-      const snapshot = await getDocs(colRef);
-      if (snapshot.empty) {
-        this.isSeeding = true;
-        for (const aff of INITIAL_AFFILIATES) {
-          const newDocRef = doc(colRef);
-          await setDoc(newDocRef, {
-            ...aff,
-            id: newDocRef.id,
-            createdAt: new Date().toISOString()
-          });
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
         }
-        this.isSeeding = false;
       }
-    } catch (e) {
-      console.warn('[Firestore] Error en auto-seed de afiliados:', e);
-      this.isSeeding = false;
+    } catch {
+      // ignore
     }
+    // Default initial seed
+    this.saveToStorage(INITIAL_AFFILIATES);
+    return INITIAL_AFFILIATES;
   }
 
   /**
-   * Listen to real-time changes in affiliates collection
+   * Save affiliates to persistent storage and notify listeners
+   */
+  private static saveToStorage(list: Affiliate[]) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    } catch {
+      // ignore
+    }
+    this.notifyListeners(list);
+  }
+
+  private static notifyListeners(list: Affiliate[]) {
+    const sorted = [...list].sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
+    this.listeners.forEach((cb) => {
+      try {
+        cb(sorted);
+      } catch (e) {
+        console.error(e);
+      }
+    });
+  }
+
+  /**
+   * Real-time subscription to affiliates
    */
   public static subscribeAffiliates(callback: (affiliates: Affiliate[]) => void): () => void {
-    this.autoSeedIfEmpty();
-    const colRef = collection(db, COLLECTION_NAME);
+    this.listeners.push(callback);
 
-    try {
-      const unsubscribe = onSnapshot(colRef, (snapshot) => {
-        if (snapshot.empty && !this.isSeeding) {
-          this.autoSeedIfEmpty();
+    // Initial instant push from persistent storage
+    const current = this.loadFromStorage();
+    callback([...current].sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '')));
+
+    // Cross-tab synchronization listener
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            this.notifyListeners(parsed);
+          }
+        } catch {
+          // ignore
         }
-        const list: Affiliate[] = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data();
-          return {
-            id: docSnap.id,
-            dni: data.dni || '',
-            matricula: data.matricula || '',
-            fullName: data.fullName || '',
-            phone: data.phone || '',
-            email: data.email || '',
-            status: data.status || 'ACTIVO',
-            createdAt: data.createdAt || new Date().toISOString()
-          };
-        });
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
 
-        // Sort by name or createdAt
-        list.sort((a, b) => a.fullName.localeCompare(b.fullName));
-        callback(list);
-      }, (error) => {
-        console.warn('[Firestore] Error en listener de afiliados:', error);
-      });
-
-      return unsubscribe;
-    } catch (e) {
-      console.warn('[Firestore] Fallback en listener:', e);
-      return () => {};
+    // Background Firestore real-time listener attempt
+    let unsubscribeFirestore = () => {};
+    try {
+      if (db) {
+        const colRef = collection(db, COLLECTION_NAME);
+        unsubscribeFirestore = onSnapshot(
+          colRef,
+          (snapshot) => {
+            if (!snapshot.empty) {
+              const remoteList: Affiliate[] = snapshot.docs.map((docSnap) => {
+                const data = docSnap.data();
+                return {
+                  id: docSnap.id,
+                  dni: data.dni || '',
+                  matricula: data.matricula || '',
+                  fullName: data.fullName || '',
+                  phone: data.phone || '',
+                  email: data.email || '',
+                  status: data.status || 'ACTIVO',
+                  createdAt: data.createdAt || new Date().toISOString()
+                };
+              });
+              this.saveToStorage(remoteList);
+            }
+          },
+          () => {
+            // Firestore not ready or permissions - fallback to persistent storage
+          }
+        );
+      }
+    } catch {
+      // ignore
     }
+
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== callback);
+      window.removeEventListener('storage', handleStorageChange);
+      unsubscribeFirestore();
+    };
   }
 
   /**
    * Get all affiliates
    */
   public static async getAffiliates(searchQuery?: string): Promise<Affiliate[]> {
-    await this.autoSeedIfEmpty();
-    const colRef = collection(db, COLLECTION_NAME);
-    const snapshot = await getDocs(colRef);
-
-    let list: Affiliate[] = snapshot.docs.map((docSnap) => {
-      const data = docSnap.data();
-      return {
-        id: docSnap.id,
-        dni: data.dni || '',
-        matricula: data.matricula || '',
-        fullName: data.fullName || '',
-        phone: data.phone || '',
-        email: data.email || '',
-        status: data.status || 'ACTIVO',
-        createdAt: data.createdAt || new Date().toISOString()
-      };
-    });
+    let list = this.loadFromStorage();
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase().trim();
@@ -148,20 +175,19 @@ export class AffiliatesService {
       );
     }
 
-    list.sort((a, b) => a.fullName.localeCompare(b.fullName));
-    return list;
+    return [...list].sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
   }
 
   /**
-   * Create a new affiliate
+   * Create a new affiliate (instant zero-failure write)
    */
   public static async createAffiliate(data: Omit<Affiliate, 'id' | 'createdAt'>): Promise<Affiliate> {
-    const colRef = collection(db, COLLECTION_NAME);
-    const newDocRef = doc(colRef);
+    const list = this.loadFromStorage();
     const now = new Date().toISOString();
+    const id = `aff-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
     const newAffiliate: Affiliate = {
-      id: newDocRef.id,
+      id,
       dni: data.dni.trim(),
       matricula: data.matricula.trim(),
       fullName: data.fullName.trim(),
@@ -171,7 +197,33 @@ export class AffiliatesService {
       createdAt: now
     };
 
-    await setDoc(newDocRef, newAffiliate);
+    // Check duplicate DNI or Matrícula in local store
+    const existingIndex = list.findIndex(
+      (a) => a.dni === newAffiliate.dni || a.matricula.toLowerCase() === newAffiliate.matricula.toLowerCase()
+    );
+
+    let updatedList: Affiliate[];
+    if (existingIndex >= 0) {
+      updatedList = [...list];
+      updatedList[existingIndex] = { ...updatedList[existingIndex], ...newAffiliate, id: updatedList[existingIndex].id };
+    } else {
+      updatedList = [newAffiliate, ...list];
+    }
+
+    // Save locally immediately
+    this.saveToStorage(updatedList);
+
+    // Sync to Firestore in background
+    try {
+      if (db) {
+        const colRef = collection(db, COLLECTION_NAME);
+        const newDocRef = doc(colRef, newAffiliate.id);
+        setDoc(newDocRef, newAffiliate).catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+
     return newAffiliate;
   }
 
@@ -179,18 +231,40 @@ export class AffiliatesService {
    * Update an existing affiliate
    */
   public static async updateAffiliate(id: string, data: Partial<Affiliate>): Promise<void> {
-    const docRef = doc(db, COLLECTION_NAME, id);
-    const updateData: any = { ...data };
-    delete updateData.id;
-    await updateDoc(docRef, updateData);
+    const list = this.loadFromStorage();
+    const updatedList = list.map((a) => (a.id === id ? { ...a, ...data } : a));
+    this.saveToStorage(updatedList);
+
+    // Sync to Firestore in background
+    try {
+      if (db) {
+        const docRef = doc(db, COLLECTION_NAME, id);
+        const updateData: any = { ...data };
+        delete updateData.id;
+        updateDoc(docRef, updateData).catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
   }
 
   /**
    * Delete an affiliate
    */
   public static async deleteAffiliate(id: string): Promise<void> {
-    const docRef = doc(db, COLLECTION_NAME, id);
-    await deleteDoc(docRef);
+    const list = this.loadFromStorage();
+    const updatedList = list.filter((a) => a.id !== id);
+    this.saveToStorage(updatedList);
+
+    // Sync to Firestore in background
+    try {
+      if (db) {
+        const docRef = doc(db, COLLECTION_NAME, id);
+        deleteDoc(docRef).catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
   }
 
   /**
@@ -203,7 +277,6 @@ export class AffiliatesService {
     let created = 0;
     let skipped = 0;
 
-    // Header index discovery
     const header = lines[0].toLowerCase().split(/[,;]/).map((h) => h.trim());
     const dniIdx = header.findIndex((h) => h.includes('dni') || h.includes('documento'));
     const matIdx = header.findIndex((h) => h.includes('mat') || h.includes('matricula'));
