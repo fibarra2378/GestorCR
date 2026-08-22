@@ -214,18 +214,33 @@ export class EmailWorkerService {
       category = TicketCategory.RECLAMO;
     }
 
-    // 4. Check for active open ticket from this email
-    const activeTicket = await prisma.ticket.findFirst({
-      where: {
-        email: { equals: cleanEmail, mode: 'insensitive' },
-        channel: TicketChannel.EMAIL,
-        status: {
-          in: [TicketStatus.NUEVO, TicketStatus.EN_REVISION, TicketStatus.PENDIENTE_AFILIADO]
-        }
-      },
-      orderBy: { createdAt: 'desc' },
-      include: { affiliate: true, messages: true }
-    });
+    // 4. Extract ticket code from subject if it's a reply (e.g., "Re: Ticket Nº TICK-123456")
+    const ticketCodeMatch = subject.match(/TICK-\d{6}/i);
+    let activeTicket = null;
+
+    if (ticketCodeMatch) {
+      activeTicket = await prisma.ticket.findFirst({
+        where: {
+          code: { equals: ticketCodeMatch[0].toUpperCase() }
+        },
+        include: { affiliate: true, messages: true }
+      });
+    }
+
+    // If no explicit ticket code in subject, check for active open ticket from this email
+    if (!activeTicket) {
+      activeTicket = await prisma.ticket.findFirst({
+        where: {
+          email: { equals: cleanEmail, mode: 'insensitive' },
+          channel: TicketChannel.EMAIL,
+          status: {
+            in: [TicketStatus.NUEVO, TicketStatus.EN_REVISION, TicketStatus.PENDIENTE_AFILIADO]
+          }
+        },
+        orderBy: { updatedAt: 'desc' },
+        include: { affiliate: true, messages: true }
+      });
+    }
 
     if (activeTicket) {
       // Append message to active ticket
@@ -238,14 +253,26 @@ export class EmailWorkerService {
         }
       });
 
-      if (activeTicket.status === TicketStatus.PENDIENTE_AFILIADO) {
-        await prisma.ticket.update({
-          where: { id: activeTicket.id },
-          data: { status: TicketStatus.EN_REVISION }
-        });
-      }
+      // Update ticket updatedAt, status to NUEVO to alert operators, and affiliateId if not linked
+      const updatedTicket = await prisma.ticket.update({
+        where: { id: activeTicket.id },
+        data: {
+          status: TicketStatus.NUEVO,
+          updatedAt: new Date(),
+          ...(!activeTicket.affiliateId && affiliate ? { affiliateId: affiliate.id } : {})
+        },
+        include: {
+          affiliate: true,
+          messages: {
+            take: 1,
+            orderBy: { createdAt: 'desc' }
+          }
+        }
+      });
 
       WSService.broadcast('NEW_MESSAGE', { ticketId: activeTicket.id, message: newMessage });
+      WSService.broadcast('TICKET_UPDATED', updatedTicket);
+
       return { processed: true, ticketCode: activeTicket.code };
     }
 

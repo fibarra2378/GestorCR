@@ -35,6 +35,8 @@ services:
       dockerfile: Dockerfile
     container_name: gestorcr-server-prod
     restart: always
+    env_file:
+      - ./server/.env
     environment:
       PORT: 4000
       NODE_ENV: production
@@ -45,6 +47,13 @@ services:
       WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-}
       WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
       WHATSAPP_API_VERSION: ${WHATSAPP_API_VERSION:-v19.0}
+      EMAIL_USER: ${EMAIL_USER:-deptotemporariosantafe@gmail.com}
+      EMAIL_PASS: ${EMAIL_PASS:-}
+      EMAIL_IMAP_HOST: ${EMAIL_IMAP_HOST:-imap.gmail.com}
+      EMAIL_IMAP_PORT: ${EMAIL_IMAP_PORT:-993}
+      EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST:-smtp.gmail.com}
+      EMAIL_SMTP_PORT: ${EMAIL_SMTP_PORT:-465}
+      EMAIL_POLL_INTERVAL_MS: ${EMAIL_POLL_INTERVAL_MS:-30000}
     depends_on:
       postgres:
         condition: service_healthy
