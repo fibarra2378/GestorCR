@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Shield, Lock, User as UserIcon } from 'lucide-react';
-import { api } from '../services/api';
+import { AuthService } from '../services/authService';
 
 interface LoginProps {
   onLoginSuccess: (user: any, token: string) => void;
@@ -21,22 +21,14 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     const cleanPassword = password.trim();
 
     try {
-      const res = await api.post('/auth/login', { username: cleanUsername, password: cleanPassword });
-      const { user, token } = res.data.data;
-      onLoginSuccess(user, token);
-    } catch (err: any) {
-      // Fallback para hosting estático / demostración en vivo si la API es inalcanzable
-      if (cleanUsername.startsWith('admin') || cleanUsername.includes('admin')) {
-        const mockUser = {
-          id: 'usr_admin_01',
-          username: 'admin',
-          name: 'Lic. Administrador Fonoaudiología',
-          role: 'ADMIN'
-        };
-        onLoginSuccess(mockUser, 'demo_token_gestorcr_2026');
-        return;
+      const authResult = await AuthService.login(cleanUsername, cleanPassword);
+      if (authResult) {
+        onLoginSuccess(authResult.user, authResult.token);
+      } else {
+        setError('Usuario o contraseña incorrectos.');
       }
-      setError(err.response?.data?.error || 'Error al iniciar sesión. Verifique credenciales.');
+    } catch (err: any) {
+      setError('Error al conectar con el servicio de autenticación.');
     } finally {
       setLoading(false);
     }

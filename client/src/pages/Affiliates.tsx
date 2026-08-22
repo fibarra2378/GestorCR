@@ -1,17 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Search, UserPlus, Upload, RefreshCw, AlertCircle, Edit2, Trash2, Users, CheckCircle2, XCircle } from 'lucide-react';
-import { api } from '../services/api';
 import { Affiliate } from '../types';
+import { AffiliatesService } from '../services/affiliatesService';
 import { AffiliateModal } from '../components/AffiliateModal';
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal';
 
-const MOCK_DEMO_AFFILIATES: Affiliate[] = [
-  { id: 'aff-1', dni: '123456789', matricula: 'MAT-9921', fullName: 'Fernando Ibarra', email: 'fernandoibarra23@gmail.com', phone: '342-4112233', status: 'ACTIVO', createdAt: new Date().toISOString() },
-  { id: 'aff-2', dni: '33445566', matricula: 'MAT-4412', fullName: 'Carlos Spadaro', email: 'carlos.spadaro@gmail.com', phone: '342-5998877', status: 'ACTIVO', createdAt: new Date().toISOString() },
-  { id: 'aff-3', dni: '28990112', matricula: 'MAT-1102', fullName: 'Laura Rossi', email: 'laura.rossi@gmail.com', phone: '342-4556677', status: 'ACTIVO', createdAt: new Date().toISOString() }
-];
-
 export const Affiliates: React.FC = () => {
+  const [allAffiliates, setAllAffiliates] = useState<Affiliate[]>([]);
   const [affiliates, setAffiliates] = useState<Affiliate[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -22,54 +17,47 @@ export const Affiliates: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
 
-  const fetchAffiliates = async () => {
+  useEffect(() => {
     setLoading(true);
-    try {
-      const res = await api.get('/affiliates', { params: { search: search || undefined } });
-      const raw = res?.data;
-      const list: Affiliate[] = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
-      setAffiliates(list);
-    } catch (err) {
-      // Fallback demo data
-      let filtered = [...MOCK_DEMO_AFFILIATES];
-      if (search) {
-        const q = search.toLowerCase();
-        filtered = filtered.filter(a =>
-          a.dni.includes(search) ||
-          a.matricula.toLowerCase().includes(q) ||
-          a.fullName.toLowerCase().includes(q)
-        );
-      }
-      setAffiliates(filtered);
-    } finally {
+    const unsubscribe = AffiliatesService.subscribeAffiliates((list) => {
+      setAllAffiliates(list);
       setLoading(false);
-    }
-  };
+    });
 
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
-    fetchAffiliates();
-  }, [search]);
+    if (!search.trim()) {
+      setAffiliates(allAffiliates);
+    } else {
+      const q = search.toLowerCase().trim();
+      const filtered = allAffiliates.filter(
+        (a) =>
+          a.dni.includes(q) ||
+          a.matricula.toLowerCase().includes(q) ||
+          a.fullName.toLowerCase().includes(q) ||
+          (a.email && a.email.toLowerCase().includes(q))
+      );
+      setAffiliates(filtered);
+    }
+  }, [search, allAffiliates]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const formData = new FormData();
-    formData.append('file', file);
-
     setUploading(true);
     setMessage('');
     try {
-      const res = await api.post('/affiliates/import-csv', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setMessage(res.data.message);
-      fetchAffiliates();
+      const text = await file.text();
+      const result = await AffiliatesService.importFromCSVText(text);
+      setMessage(`✅ Se importaron ${result.created} afiliados con éxito (${result.skipped} omitidos/duplicados).`);
     } catch (err: any) {
-      setMessage(`❌ ${err.response?.data?.error || 'Error al importar CSV'}`);
+      setMessage(`❌ Error al importar archivo CSV: ${err.message}`);
     } finally {
       setUploading(false);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -83,22 +71,10 @@ export const Affiliates: React.FC = () => {
     const id = deleteAffiliateTarget.id;
     setDeleting(true);
     try {
-      await api.delete(`/affiliates/${id}`);
-      setAffiliates(prev => {
-        const safePrev = Array.isArray(prev) ? prev : [];
-        return safePrev.filter(a => a.id !== id);
-      });
-      setMessage('✅ Afiliado eliminado correctamente');
+      await AffiliatesService.deleteAffiliate(id);
+      setMessage('✅ Afiliado eliminado correctamente del padrón.');
     } catch (err: any) {
-      if (!err.response) {
-        setAffiliates(prev => {
-          const safePrev = Array.isArray(prev) ? prev : [];
-          return safePrev.filter(a => a.id !== id);
-        });
-        setMessage('✅ Afiliado eliminado (modo simulación)');
-      } else {
-        setMessage(`❌ ${err.response?.data?.error || 'Error al eliminar afiliado'}`);
-      }
+      setMessage(`❌ Error al eliminar afiliado: ${err.message}`);
     } finally {
       setDeleting(false);
       setDeleteAffiliateTarget(undefined);
@@ -187,7 +163,7 @@ export const Affiliates: React.FC = () => {
           />
         </div>
 
-        <button className="btn btn-secondary" onClick={fetchAffiliates}>
+        <button className="btn btn-secondary" onClick={() => AffiliatesService.getAffiliates().then(setAllAffiliates)}>
           <RefreshCw size={16} />
           <span>Actualizar</span>
         </button>
@@ -282,14 +258,8 @@ export const Affiliates: React.FC = () => {
           setIsAddModalOpen(false);
           setSelectedAffiliate(undefined);
         }}
-        onSuccess={(newAffiliate) => {
-          fetchAffiliates();
-          if (newAffiliate) {
-            setAffiliates((prev) => {
-              const safePrev = Array.isArray(prev) ? prev : [];
-              return [newAffiliate, ...safePrev.filter((a) => a.id !== newAffiliate.id)];
-            });
-          }
+        onSuccess={() => {
+          setMessage('✅ Padrón de afiliados actualizado correctamente.');
         }}
       />
       <ConfirmDeleteModal

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, UserPlus, Edit2 } from 'lucide-react';
-import { api } from '../services/api';
 import { Affiliate } from '../types';
+import { AffiliatesService } from '../services/affiliatesService';
 
 interface AffiliateModalProps {
   isOpen: boolean;
@@ -60,43 +60,38 @@ export const AffiliateModal: React.FC<AffiliateModalProps> = ({ isOpen, onClose,
 
     setLoading(true);
     try {
-      let res;
-      const payload = {
-        dni: trimmedDni,
-        matricula: trimmedMatricula,
-        fullName: trimmedFullName,
-        phone: trimmedPhone || undefined,
-        email: trimmedEmail || undefined,
-        status
-      };
-
       if (initialData) {
-        res = await api.patch(`/affiliates/${initialData.id}`, payload);
-      } else {
-        res = await api.post('/affiliates', payload);
-      }
-
-      const createdAffiliate: Affiliate = res.data?.data || res.data;
-      onSuccess(createdAffiliate);
-      onClose();
-    } catch (err: any) {
-      if (!err.response) {
-        // Mode without active server / static environment fallback
-        const mockCreated: Affiliate = {
-          id: initialData ? initialData.id : `aff-${Date.now()}`,
+        await AffiliatesService.updateAffiliate(initialData.id, {
           dni: trimmedDni,
           matricula: trimmedMatricula,
           fullName: trimmedFullName,
           phone: trimmedPhone || undefined,
           email: trimmedEmail || undefined,
-          status: status || (initialData ? initialData.status : 'ACTIVO'),
-          createdAt: initialData ? initialData.createdAt : new Date().toISOString()
-        };
-        onSuccess(mockCreated);
-        onClose();
-        return;
+          status
+        });
+        onSuccess({
+          ...initialData,
+          dni: trimmedDni,
+          matricula: trimmedMatricula,
+          fullName: trimmedFullName,
+          phone: trimmedPhone,
+          email: trimmedEmail,
+          status
+        });
+      } else {
+        const created = await AffiliatesService.createAffiliate({
+          dni: trimmedDni,
+          matricula: trimmedMatricula,
+          fullName: trimmedFullName,
+          phone: trimmedPhone,
+          email: trimmedEmail,
+          status
+        });
+        onSuccess(created);
       }
-      setError(err.response?.data?.error || 'Error al guardar afiliado');
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Error al guardar afiliado en Firestore');
     } finally {
       setLoading(false);
     }

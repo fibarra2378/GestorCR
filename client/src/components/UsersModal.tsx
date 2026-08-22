@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, UserPlus, Trash2, Shield, User } from 'lucide-react';
-import { api } from '../services/api';
+import { AuthService } from '../services/authService';
 
 interface UsersModalProps {
   isOpen: boolean;
@@ -21,18 +21,14 @@ export const UsersModal: React.FC<UsersModalProps> = ({ isOpen, onClose }) => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/users');
-      const raw = res?.data;
-      const list = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+      const list = await AuthService.getUsers();
       setUsers(list);
     } catch (err: any) {
-      // En hosting estático sin backend, mostrar lista vacía sin error
       setUsers([]);
     } finally {
       setLoading(false);
     }
   };
-
 
   useEffect(() => {
     if (isOpen) {
@@ -45,7 +41,7 @@ export const UsersModal: React.FC<UsersModalProps> = ({ isOpen, onClose }) => {
     setError('');
 
     try {
-      await api.post('/users', { username, name, password, role });
+      await AuthService.createUser({ username, name, password, role });
       setUsername('');
       setName('');
       setPassword('');
@@ -53,17 +49,17 @@ export const UsersModal: React.FC<UsersModalProps> = ({ isOpen, onClose }) => {
       setShowAddForm(false);
       fetchUsers();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Error al crear operador');
+      setError(err.message || 'Error al crear operador');
     }
   };
 
   const handleDeleteUser = async (id: string, name: string) => {
     if (!window.confirm(`¿Estás seguro de eliminar al operador "${name}"?`)) return;
     try {
-      await api.delete(`/users/${id}`);
+      await AuthService.deleteUser(id);
       fetchUsers();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Error al eliminar operador');
+      alert(err.message || 'Error al eliminar operador');
     }
   };
 

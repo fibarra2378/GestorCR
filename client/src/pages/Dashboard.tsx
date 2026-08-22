@@ -1,253 +1,126 @@
 import React, { useState, useEffect } from 'react';
 import { TicketList } from '../components/TicketList';
 import { TicketChat } from '../components/TicketChat';
-import { api, WSSubscription } from '../services/api';
+import { TicketsService } from '../services/ticketsService';
 import { Ticket, TicketStatus, TicketCategory } from '../types';
 import { Ticket as TicketIcon, Clock, CheckCircle2 } from 'lucide-react';
 
-const MOCK_DEMO_TICKETS: Ticket[] = [
-  {
-    id: 'tick-1',
-    code: 'TICK-358189',
-    phone: 'fernandoibarra23@gmail.com',
-    email: 'fernandoibarra23@gmail.com',
-    channel: 'EMAIL',
-    category: 'CONSULTA',
-    status: 'NUEVO',
-    priority: 'MEDIA',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    affiliate: {
-      id: 'aff-1',
-      dni: '123456789',
-      matricula: 'MAT-9921',
-      fullName: 'Fernando Ibarra',
-      email: 'fernandoibarra23@gmail.com',
-      status: 'ACTIVO',
-      createdAt: new Date().toISOString()
-    },
-    messages: [
-      { id: 'm-1', ticketId: 'tick-1', sender: 'AFILIADO', body: '[Email: Consulta] Consulta sobre certificado de matrícula 2026', createdAt: new Date().toISOString() }
-    ]
-  },
-  {
-    id: 'tick-2',
-    code: 'TICK-455970',
-    phone: 'carlos.spadaro@gmail.com',
-    email: 'carlos.spadaro@gmail.com',
-    channel: 'EMAIL',
-    category: 'RECLAMO',
-    status: 'NUEVO',
-    priority: 'ALTA',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    affiliate: {
-      id: 'aff-2',
-      dni: '33445566',
-      matricula: 'MAT-4412',
-      fullName: 'Carlos Spadaro',
-      email: 'carlos.spadaro@gmail.com',
-      status: 'ACTIVO',
-      createdAt: new Date().toISOString()
-    },
-    messages: [
-      { id: 'm-2', ticketId: 'tick-2', sender: 'AFILIADO', body: '[Email: Reclamo] Reclamo de acreditación de pago de cuota mensual', createdAt: new Date().toISOString() }
-    ]
-  },
-  {
-    id: 'tick-3',
-    code: 'TICK-392319',
-    phone: 'laura.rossi@gmail.com',
-    email: 'laura.rossi@gmail.com',
-    channel: 'EMAIL',
-    category: 'MATRICULA',
-    status: 'EN_REVISION',
-    priority: 'MEDIA',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    affiliate: {
-      id: 'aff-3',
-      dni: '28990112',
-      matricula: 'MAT-1102',
-      fullName: 'Laura Rossi',
-      email: 'laura.rossi@gmail.com',
-      status: 'ACTIVO',
-      createdAt: new Date().toISOString()
-    },
-    messages: [
-      { id: 'm-3', ticketId: 'tick-3', sender: 'AFILIADO', body: 'Solicitud de constancia de ética profesional para trámite externo', createdAt: new Date().toISOString() }
-    ]
-  }
-];
-
 export const Dashboard: React.FC = () => {
+  const [allTickets, setAllTickets] = useState<Ticket[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [allTickets, setAllTickets] = useState<Ticket[]>([]); // Unfiltered tickets for global KPI calculation
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [loading, setLoading] = useState(true);
   const [kpiPulsing, setKpiPulsing] = useState(false);
-  const [isDemoMode, setIsDemoMode] = useState(false);
-
-  // Detect if running in static Firebase Hosting (no backend available)
-  const isStaticHosting = (
-    window.location.hostname.includes('web.app') ||
-    window.location.hostname.includes('firebaseapp.com')
-  );
 
   const triggerKpiPulse = () => {
     setKpiPulsing(true);
     setTimeout(() => setKpiPulsing(false), 1200);
   };
 
-  const fetchTickets = async () => {
-    try {
-      // Helper para extraer array de cualquier forma de respuesta
-      const extractArray = (res: any): Ticket[] => {
-        const raw = res?.data;
-        if (Array.isArray(raw)) return raw;
-        if (Array.isArray(raw?.data)) return raw.data;
-        return [];
-      };
-
-      // 1. Fetch filtered tickets for the list
-      const res = await api.get('/tickets', {
-        params: {
-          search: searchQuery || undefined,
-          status: statusFilter !== 'ALL' ? statusFilter : undefined,
-          category: categoryFilter !== 'ALL' ? categoryFilter : undefined
-        }
-      });
-      const filteredList = extractArray(res);
-
-      // 2. Fetch all tickets without filters to compute global KPI cards & category badges
-      const allRes = await api.get('/tickets');
-      const fullList = extractArray(allRes);
-
-      setTickets(filteredList);
-      setAllTickets(fullList);
-
-      if (selectedTicket) {
-        const updated = filteredList.find((t: Ticket) => t.id === selectedTicket.id);
-        if (updated) fetchTicketDetails(updated.id);
-      }
-    } catch (err) {
-      // Fallback: backend offline or static hosting — load demo data
-      console.warn('Backend indisponible. Cargando datos demostrativos.');
-      let demoList = [...MOCK_DEMO_TICKETS];
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        demoList = demoList.filter(t =>
-          t.code.toLowerCase().includes(q) ||
-          t.phone.toLowerCase().includes(q) ||
-          (t.affiliate?.fullName || '').toLowerCase().includes(q)
-        );
-      }
-      if (statusFilter !== 'ALL') demoList = demoList.filter(t => t.status === statusFilter);
-      if (categoryFilter !== 'ALL') demoList = demoList.filter(t => t.category === categoryFilter);
-
-      setTickets(demoList);
-      setAllTickets([...MOCK_DEMO_TICKETS]);
-      if (!selectedTicket && demoList.length > 0) {
-        setSelectedTicket(demoList[0]);
-      }
-    } finally {
+  useEffect(() => {
+    setLoading(true);
+    const unsubscribe = TicketsService.subscribeTickets((list) => {
+      setAllTickets(list);
       setLoading(false);
-    }
-  };
+      triggerKpiPulse();
 
-
-  const fetchTicketDetails = async (id: string) => {
-    try {
-      const res = await api.get(`/tickets/${id}`);
-      setSelectedTicket(res.data.data);
-    } catch (err) {
-      const found = MOCK_DEMO_TICKETS.find(t => t.id === id);
-      if (found) setSelectedTicket(found);
-    }
-  };
-
-
-  useEffect(() => {
-    fetchTickets();
-  }, [searchQuery, statusFilter, categoryFilter]);
-
-  useEffect(() => {
-    WSSubscription.connect();
-    const unsubscribe = WSSubscription.subscribe((event) => {
-      if (event.type === 'NEW_TICKET' || event.type === 'TICKET_UPDATED') {
-        triggerKpiPulse();
-        fetchTickets();
-      } else if (event.type === 'NEW_MESSAGE') {
-        triggerKpiPulse();
-        fetchTickets();
-        if (selectedTicket && selectedTicket.id === event.payload.ticketId) {
-          fetchTicketDetails(selectedTicket.id);
-        }
+      // If a ticket is currently selected, update its reference with latest data
+      if (selectedTicket) {
+        const found = list.find((t) => t.id === selectedTicket.id);
+        if (found) setSelectedTicket(found);
       }
     });
 
     return () => unsubscribe();
-  }, [selectedTicket]);
+  }, [selectedTicket?.id]);
 
-  const handleSelectTicket = (ticket: Ticket) => {
-    fetchTicketDetails(ticket.id);
+  useEffect(() => {
+    let filtered = [...allTickets];
 
-    // If ticket is NUEVO, automatically mark it EN_REVISION (attended) to update badges & counters
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(
+        (t) =>
+          t.code.toLowerCase().includes(q) ||
+          t.phone.toLowerCase().includes(q) ||
+          (t.email && t.email.toLowerCase().includes(q)) ||
+          (t.affiliate?.fullName || '').toLowerCase().includes(q) ||
+          (t.affiliate?.dni || '').includes(q)
+      );
+    }
+
+    if (statusFilter !== 'ALL') {
+      filtered = filtered.filter((t) => t.status === statusFilter);
+    }
+
+    if (categoryFilter !== 'ALL') {
+      filtered = filtered.filter((t) => t.category === categoryFilter);
+    }
+
+    setTickets(filtered);
+
+    // Auto-select first ticket if none is selected
+    if (!selectedTicket && filtered.length > 0) {
+      setSelectedTicket(filtered[0]);
+    }
+  }, [searchQuery, statusFilter, categoryFilter, allTickets]);
+
+  const handleSelectTicket = async (ticket: Ticket) => {
+    setSelectedTicket(ticket);
     if (ticket.status === 'NUEVO') {
-      handleUpdateStatus(ticket.id, 'EN_REVISION');
+      await TicketsService.updateStatus(ticket.id, 'EN_REVISION');
     }
   };
 
   const handleSendReply = async (ticketId: string, body: string) => {
     try {
-      await api.post(`/tickets/${ticketId}/reply`, { body });
-      await fetchTicketDetails(ticketId);
-      await fetchTickets();
+      await TicketsService.sendReply(ticketId, body);
     } catch (err) {
-      if (selectedTicket && selectedTicket.id === ticketId) {
-        const newMsg = { id: `m_${Date.now()}`, ticketId, sender: 'OPERADOR' as const, body, createdAt: new Date().toISOString() };
-        const updatedMsgs = [...(selectedTicket.messages || []), newMsg];
-        const updatedTicket = { ...selectedTicket, status: 'PENDIENTE_AFILIADO' as const, messages: updatedMsgs };
-        setSelectedTicket(updatedTicket);
-        setTickets(prev => prev.map(t => t.id === ticketId ? updatedTicket : t));
-        setAllTickets(prev => prev.map(t => t.id === ticketId ? updatedTicket : t));
-      }
+      console.error('Error al enviar respuesta:', err);
     }
   };
 
   const handleUpdateStatus = async (ticketId: string, status: TicketStatus) => {
     try {
-      await api.patch(`/tickets/${ticketId}`, { status });
+      await TicketsService.updateStatus(ticketId, status);
       triggerKpiPulse();
-      await fetchTicketDetails(ticketId);
-      await fetchTickets();
     } catch (err) {
-      triggerKpiPulse();
-      setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status } : t));
-      setAllTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status } : t));
-      if (selectedTicket && selectedTicket.id === ticketId) {
-        setSelectedTicket(prev => prev ? { ...prev, status } : null);
-      }
+      console.error('Error al actualizar estado:', err);
     }
   };
 
   const handleUpdateCategory = async (ticketId: string, category: TicketCategory) => {
     try {
-      await api.patch(`/tickets/${ticketId}`, { category });
+      await TicketsService.updateCategory(ticketId, category);
       triggerKpiPulse();
-      await fetchTicketDetails(ticketId);
-      await fetchTickets();
     } catch (err) {
-      triggerKpiPulse();
-      setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, category } : t));
-      setAllTickets(prev => prev.map(t => t.id === ticketId ? { ...t, category } : t));
-      if (selectedTicket && selectedTicket.id === ticketId) {
-        setSelectedTicket(prev => prev ? { ...prev, category } : null);
-      }
+      console.error('Error al actualizar categoría:', err);
     }
+  };
+
+  const handleExportCSV = () => {
+    let csv = '\uFEFFCódigo,Teléfono/Email,Afiliado,DNI,Matrícula,Categoría,Estado,Prioridad,Fecha\n';
+    const listToExport = tickets;
+
+    for (const t of listToExport) {
+      const affName = t.affiliate ? `"${t.affiliate.fullName.replace(/"/g, '""')}"` : 'Sin Vincular';
+      const dni = t.affiliate?.dni || '';
+      const mat = t.affiliate?.matricula || '';
+      const date = t.createdAt ? t.createdAt.replace('T', ' ').substring(0, 19) : '';
+      csv += `${t.code},${t.email || t.phone},${affName},${dni},${mat},${t.category},${t.status},${t.priority},${date}\n`;
+    }
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `GestorCR_Tickets_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
 
@@ -349,9 +222,7 @@ export const Dashboard: React.FC = () => {
         <button
           className="btn btn-primary"
           style={{ marginLeft: 'auto', padding: '0.4rem 0.85rem', fontSize: '0.82rem' }}
-          onClick={() => {
-            window.open(`/api/export/tickets-csv?status=${statusFilter}&category=${categoryFilter}`, '_blank');
-          }}
+          onClick={handleExportCSV}
         >
           Exportar Reporte CSV
         </button>
