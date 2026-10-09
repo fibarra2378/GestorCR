@@ -1,0 +1,53 @@
+name: Auto Generate Issues from Code
+
+on:
+  workflow_dispatch:
+
+jobs:
+  scan-and-create:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Scan and Create Issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          python - << 'EOF'
+          import os
+          import subprocess
+
+          repo = os.environ["REPO"]
+          source_dir = "."
+          extensions = [".py", ".js", ".ts", ".java", ".go", ".cs", ".sql"]
+          exclude_dirs = {".git", "node_modules", "venv", "__pycache__", "dist", "build", ".github"}
+
+          for root, dirs, files in os.walk(source_dir):
+              dirs[:] = [d for d in dirs if d not in exclude_dirs]
+              for file in files:
+                  if any(file.endswith(ext) for ext in extensions):
+                      file_path = os.path.join(root, file)
+                      try:
+                          with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                              for line_num, line in enumerate(f, 1):
+                                  if "TODO" in line or "FIXME" in line:
+                                      title = line.strip().replace("//", "").replace("#", "").replace("/*", "").strip()[:80]
+                                      body = f"Generado automáticamente desde GitHub Actions.\n- **Archivo:** `{file_path}`\n- **Línea:** {line_num}"
+                                      cmd = ["gh", "issue", "create", "--repo", repo, "--title", title, "--body", body, "--label", "tech-debt"]
+                                      result = subprocess.run(cmd, capture_output=True, text=True)
+                                      if result.returncode == 0:
+                                          print(f"Creado: {title}")
+                                      else:
+                                          print(f"Error: {result.stderr.strip()}")
+                      except Exception as e:
+                          print(f"Error en {file_path}: {e}")
+          EOF
